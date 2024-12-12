@@ -98,11 +98,11 @@ feeding <- feeding %>%
   filter(!(detail %in% c(10, 12, 14, 24, 25, 26, 30)))
 
 #group food types for comparisons
-other_food_types <- c(1, 3, 4, 5, 6, 7, 8, 9, 11, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 27, 28, 29, 31, 32)
+income <- c(1, 3, 4, 5, 6, 7, 8, 9, 11, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 27, 28, 29, 31, 32)
 
 feeding <- feeding %>%
-  mutate(food_type = ifelse(detail %in% other_food_types, "other", 
-                            ifelse(detail == 2, "cone", NA))) %>%
+  mutate(food_type = ifelse(detail %in% income, "income", 
+                            ifelse(detail == 2, "capital", NA))) %>%
   filter(!is.na(food_type))
 
 

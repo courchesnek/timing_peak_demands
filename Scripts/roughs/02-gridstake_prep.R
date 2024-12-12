@@ -1,42 +1,46 @@
 #load packages
-source("scripts/00-packages.R")
+source("Scripts/00-packages.R")
 
-# Connection to KRSP database
+#connect to KRSP database
 con_suppl <- krsp_connect (host = "krsp.cepb5cjvqban.us-east-2.rds.amazonaws.com",
                            dbname ="krsp_suppl",
                            username = Sys.getenv("krsp_user"),
                            password = Sys.getenv("krsp_password")
 )
 
-
-# import grid stake lat long values ---------------------------------------
-
+#pull in grid stakes
 grid_stakes<-tbl(con_suppl, "grid_stakes") %>% 
   filter(!is.na(north),
          !is.na(west)) %>% 
-  collect()
-
-grid_stakes <- grid_stakes %>%
-  filter(grid %in% c("KL", "SU")) %>%
+  collect() %>%
   dplyr::select(-comments)
 
-fwrite(grid_stakes, "output/grid_stakes.csv")
-
-# Convert to spatial coordinates
-
+#convert to spatial cords
 grid_stakes$north = as.numeric(grid_stakes$north)
 class(grid_stakes$north)
 grid_stakes$west = as.numeric(grid_stakes$west)
 grid_stakes$east = -grid_stakes$west
 
+#fix coordinate system
 cord.dec = st_as_sf(grid_stakes, coords=c("east","north"), crs=4326)
-KL_utm <- st_transform(cord.dec, crs=3154)
+grid_UTM <- st_transform(cord.dec, crs=3154) %>%
+  dplyr::select(-west)
 
-# Filter for only KL stakes and remove 'west' column
-KL_utm <- KL_utm %>%
-  filter(grid == 'KL') %>%
-  select(-comments)
 
 # save --------------------------------------------------------------------
+fwrite(grid_stakes, "Output/grid_stakes.csv")
+fwrite(grid_UTM, "Input/grid_utm.csv")
 
-fwrite(KL_utm, "output/KL_utm.csv")
+
+
+
+
+
+
+
+
+
+
+
+
+
