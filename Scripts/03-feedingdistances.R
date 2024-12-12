@@ -13,7 +13,7 @@ feeding <- feeding %>%
 
 # create midden buffers to represent territory sizes --------------------------
 #define the buffer size in "grid logic"
-buffer_radius <- 20 / 30 #20m buffer in grid terms
+buffer_radius <- 30 / 30 #30m buffer in grid terms (1 grid "unit")
 
 #add buffer to midden locs = territory
 feeding <- feeding %>%
@@ -43,7 +43,7 @@ ggsave("Output/census_mids_buff.jpeg", plot = census_mids_buff, width = 8, heigh
 
 
 # distance feeding obs to midden ------------------------------------------
-buffer_radius_meters <- 20 #20m radius
+buffer_radius_meters <- 30 #20m radius
 
 #calculate Euclidean distance and determine if within buffer
 feeding <- feeding %>%
@@ -82,6 +82,8 @@ feeding_summary <- feeding_within_territory %>%
     n = n()
   )
 
+feeding_summary
+
 write.csv(feeding_summary, "Output/feeding_summary.csv", row.names = FALSE)
 
 # stats: compare distance to midden between sexes -------------------------
@@ -95,11 +97,7 @@ ggplot(feeding_within_territory, aes(x = distance_to_midden)) +
   ) +
   theme_minimal()
 
-set.seed(123) # Set seed for reproducibility
-subset_data <- feeding_within_territory %>%
-  sample_n(5000)
-
-shapiro.test(subset_data$distance_to_midden) #p-value <0.05 so data is NOT normally distributed
+shapiro.test(feeding_within_territory$distance_to_midden) #p-value <0.05 so data is NOT normally distributed
 
 #let's do a Wilcoxon rank-sum test - comparing two groups (males and females) with continuous, non-normally distributed data
 wilcox_test <- wilcox.test(distance_to_midden ~ sex, data = feeding_within_territory)
@@ -119,16 +117,20 @@ ggplot(feeding_within_territory, aes(x = sex, y = distance_to_midden, fill = sex
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5))
 
-ggplot(feeding_within_territory, aes(x = sex, y = distance_to_midden, fill = sex)) +
+violin <- ggplot(feeding_within_territory, aes(x = sex, y = distance_to_midden, fill = sex)) +
   geom_violin(alpha = 0.7, trim = FALSE) +
   geom_boxplot(width = 0.1, color = "black", alpha = 0.5) + #add boxplot inside the violin
   labs(
     title = "Feeding Distance to Midden by Sex",
     x = "Sex",
     y = "Distance to Midden (m)") +
-  scale_fill_manual(values = c("pink", "blue")) + 
+  scale_fill_manual(values = c("red", "blue")) + 
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5))
+
+violin
+
+ggsave("Output/violin.jpeg", plot = violin, width = 8, height = 6)
 
 #plot all middens and all feeding obs - suuuuper messy? --------------------------------------------------------
 #all feeding

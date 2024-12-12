@@ -26,15 +26,9 @@ feeding <- behaviour %>%
   dplyr::select(id, behaviour, date, detail, grid, mode, squirrel_id, time, locx, locy) %>%
   collect() %>%
   filter(behaviour == 1,  #feeding observations
-         mode %in% c(1,3))  %>% #casual observations & focal observations
-  mutate(year = year(date),
-         month_num = month(ymd(date)),  #extract numeric month
-         month = numeric_to_month_abbrev(month(ymd(date))),  #convert numeric month to abbreviation
-         week = week(ymd(date)),
-         mast = case_when(
-           year(date) %in% c(1993, 1998, 2005, 2010, 2014, 2019, 2022) ~ "MAST",
-           year(date) %in% c(1994, 1999, 2006, 2011, 2015, 2020, 2023) ~ "POSTMAST",
-           TRUE ~ "NONMAST") #want years with "typical" breeding windows
+         mode %in% c(1,3)) %>%
+  mutate(
+    year = year(ymd(date))
   )
 
 #we still need the sex of the squirrels here so let's connect to the flastall (first_last_all contains first last records of squirrels and is really handy for this type of stuff)... 
@@ -76,14 +70,14 @@ feeding <- feeding %>%
   left_join(breeding_lac, by = "year") %>%  #join the breeding window data by year
   mutate(
     repro_stage = case_when(
-      date >= earliest_birth_date & date <= latest_birth_date ~ "BREEDING",
+      date >= earliest_birth_date & date <= latest_birth_date ~ "MATING",
       date > latest_birth_date & date <= end_lactation ~ "LACTATING",
       TRUE ~ NA_character_  #assign NA if the date doesn't fall within any window
     )
   )
 
 feeding <- feeding %>%
-  dplyr::select(squirrel_id, sex, date, mast, repro_stage, detail, grid, locx, locy) %>%
+  dplyr::select(squirrel_id, sex, date, repro_stage, detail, grid, locx, locy) %>%
   na.omit(feeding$repro_stage)
 
 #fix weird detail entries 
@@ -105,9 +99,14 @@ feeding <- feeding %>%
                             ifelse(detail == 2, "capital", NA))) %>%
   filter(!is.na(food_type))
 
+#need to filter for only male events during mating and only female events during lactation - only want each sex during peak energy demands
+filtered_feeding <- feeding %>%
+  filter(
+    (sex == "M" & repro_stage == "MATING") |
+      (sex == "F" & repro_stage == "LACTATING"))
 
 # save --------------------------------------------------------------------
-write.csv(feeding, "Input/allfeedingobs.csv", row.names = FALSE)
+write.csv(filtered_feeding, "Input/allfeedingobs.csv", row.names = FALSE)
 
 
 
