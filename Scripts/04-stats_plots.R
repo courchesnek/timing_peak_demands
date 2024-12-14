@@ -70,42 +70,36 @@ summary_table
 #save
 write.csv(summary_table, "Output/feeding_summary_4way.csv", row.names = FALSE)
 
+# Kruskal-Wallis and post-hoc pairwise tests ------------------------------
+#create a group column
+feeding_within_territory <- feeding_within_territory %>%
+  mutate(group = paste(repro_stage, food_type, sex, sep = "-"))
 
-#Wilcoxon test and effect sizes ------------------------------------------
-#creat a function to perform Wilcoxon and Cliff's Delta
-calculate_stats <- function(data) {
-  list(
-    wilcox_p = wilcox.test(distance_to_midden ~ sex, data = data)$p.value,
-    cliffs_delta = cliff.delta(distance_to_midden ~ sex, data = data)$estimate,
-    cliffs_delta_lower = cliff.delta(distance_to_midden ~ sex, data = data)$conf.int[1],
-    cliffs_delta_upper = cliff.delta(distance_to_midden ~ sex, data = data)$conf.int[2]
+#Kruskal-Wallis test
+kruskal_test <- kruskal.test(distance_to_midden ~ group, data = feeding_within_territory)
+kruskal_test
+
+#perform Dunn's test for pairwise comparisons
+dunn_results <- dunn.test(
+  x = feeding_within_territory$distance_to_midden,
+  g = feeding_within_territory$group,
+  method = "bonferroni")
+
+dunn_results
+
+#summary stats by group
+group_summary <- feeding_within_territory %>%
+  group_by(group) %>%
+  summarize(
+    mean_distance = mean(distance_to_midden, na.rm = TRUE),
+    median_distance = median(distance_to_midden, na.rm = TRUE),
+    max_distance = max(distance_to_midden, na.rm = TRUE),
+    sd_distance = sd(distance_to_midden, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
   )
-}
 
-#apply to each subset
-cone_mating_stats <- calculate_stats(cone_mating)
-income_mating_stats <- calculate_stats(income_mating)
-cone_lactating_stats <- calculate_stats(cone_lactating)
-income_lactating_stats <- calculate_stats(income_lactating)
-
-#combine results into a table
-test_results <- data.frame(
-  group = c("Cone Mating", "Income Mating", "Cone Lactating", "Income Lactating"),
-  wilcox_p = c(cone_mating_stats$wilcox_p, income_mating_stats$wilcox_p,
-               cone_lactating_stats$wilcox_p, income_lactating_stats$wilcox_p),
-  cliffs_delta = c(cone_mating_stats$cliffs_delta, income_mating_stats$cliffs_delta,
-                   cone_lactating_stats$cliffs_delta, income_lactating_stats$cliffs_delta),
-  cliffs_delta_lower = c(cone_mating_stats$cliffs_delta_lower, income_mating_stats$cliffs_delta_lower,
-                         cone_lactating_stats$cliffs_delta_lower, income_lactating_stats$cliffs_delta_lower),
-  cliffs_delta_upper = c(cone_mating_stats$cliffs_delta_upper, income_mating_stats$cliffs_delta_upper,
-                         cone_lactating_stats$cliffs_delta_upper, income_lactating_stats$cliffs_delta_upper)
-)
-
-test_results
-
-#save
-write.csv(test_results, "Output/test_results_4way.csv", row.names = FALSE)
-
+group_summary
 
 # plot --------------------------------------------------------------------
 #add grouping columns to the main dataset
@@ -142,7 +136,3 @@ four_panel_plot
 
 # Save the updated plot
 ggsave("Output/violin.jpeg", plot = four_panel_plot, width = 12, height = 8)
-
-
-
-
