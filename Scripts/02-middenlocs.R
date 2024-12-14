@@ -14,7 +14,9 @@ census <- tbl(con,"census") %>%
   collect()
 
 #pull in feeding obs
-feeding <- read.csv("Input/allfeedingobs.csv")
+# cone_feeding <- read.csv("Input/conefeedingobs.csv")
+# income_feeding <- read.csv("Input/incomefeedingobs.csv")
+all_feeding <- read.csv("Input/allfeedingobs.csv")
 
 #clean up census data before merging
 census <- census %>%
@@ -331,27 +333,42 @@ write.csv(census_clean, "Input/census_clean.csv", row.names = FALSE)
 # add census locs to feeding obs ------------------------------------------
 
 #add year columns
-feeding <- feeding %>%
+# cone_feeding <- cone_feeding %>%
+#   mutate(year = format(as.Date(date), "%Y"))
+# 
+# income_feeding <- income_feeding %>%
+#   mutate(year = format(as.Date(date), "%Y"))
+
+all_feeding <- all_feeding %>%
   mutate(year = format(as.Date(date), "%Y"))
 
 census_clean <- census_clean %>%
   mutate(year = format(as.Date(census_date), "%Y"))
 
 #merge tables by squirrel_id and by year
-feeding_all <- feeding %>%
+# cone_feeding_census <- cone_feeding %>%
+#   left_join(census_clean %>%
+#       dplyr::select(squirrel_id, year, locx, locy),
+#     by = c("squirrel_id", "year"), relationship = "many-to-many") %>%
+#   rename(locx_census = locx.y, locy_census = locy.y, locx_obs = locx.x, locy_obs = locy.x)
+# 
+# write.csv(cone_feeding_census, "Input/cone_feeding_census.csv", row.names = FALSE)
+# 
+# income_feeding_census <- income_feeding %>%
+#   left_join(census_clean %>%
+#       dplyr::select(squirrel_id, year, locx, locy),
+#       by = c("squirrel_id", "year"), relationship = "many-to-many") %>%
+#   rename(locx_census = locx.y, locy_census = locy.y, locx_obs = locx.x, locy_obs = locy.x)
+# 
+# write.csv(income_feeding_census, "Input/income_feeding_census.csv", row.names = FALSE)
+
+all_feeding_census <- all_feeding %>%
   left_join(census_clean %>%
-      dplyr::select(squirrel_id, year, locx, locy),
-    by = c("squirrel_id", "year"), relationship = "many-to-many") %>%
+              dplyr::select(squirrel_id, year, locx, locy),
+            by = c("squirrel_id", "year"), relationship = "many-to-many") %>%
   rename(locx_census = locx.y, locy_census = locy.y, locx_obs = locx.x, locy_obs = locy.x)
 
-write.csv(feeding_all, "Input/feeding_census.csv", row.names = FALSE)
-
-
-
-
-
-
-
+write.csv(all_feeding_census, "Input/all_feeding_census.csv", row.names = FALSE)
 
 
 

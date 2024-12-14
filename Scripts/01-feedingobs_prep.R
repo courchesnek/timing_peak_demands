@@ -99,19 +99,28 @@ feeding <- feeding %>%
                             ifelse(detail == 2, "capital", NA))) %>%
   filter(!is.na(food_type))
 
-#need to filter for only male events during mating and only female events during lactation - only want each sex during peak energy demands
-filtered_feeding <- feeding %>%
-  filter(
-    (sex == "M" & repro_stage == "MATING") |
-      (sex == "F" & repro_stage == "LACTATING"))
+# #need to filter for only male events during mating and only female events during lactation - only want each sex during peak energy demands
+# filtered_feeding <- feeding %>%
+#   filter(
+#     (sex == "M" & repro_stage == "MATING") |
+#       (sex == "F" & repro_stage == "LACTATING"))
 
-# save --------------------------------------------------------------------
-write.csv(filtered_feeding, "Input/allfeedingobs.csv", row.names = FALSE)
+#save
+write.csv(feeding, "Input/allfeedingobs.csv", row.names = FALSE)
 
-
-
-
-
+#feeding only on cones
+# feed_cones <- feeding %>%
+#   filter(food_type == "capital")
+# 
+# #save
+# write.csv(feed_cones, "Input/conefeedingobs.csv", row.names = FALSE)
+# 
+# #feeding only income resources
+# feed_income <- feeding %>%
+#   filter(food_type == "income")
+# 
+# #save
+# write.csv(feed_income, "Input/incomefeedingobs.csv", row.names = FALSE)
 
 
 
