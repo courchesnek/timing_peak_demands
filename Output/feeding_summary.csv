@@ -1,3 +1,9 @@
-"sex","mean_distance","median_distance","max_distance","sd_distance","n"
-"F",17.6480948951581,15,51.7880295048962,13.3366684422942,5472
-"M",16.29450347255,15,51.7880295048962,11.152789396171,10473
+"sex","repro_stage","food_type","total_events","proportion"
+"F","MATING","capital",1467,0.573046875
+"F","MATING","income",1093,0.426953125
+"F","LACTATING","capital",596,0.130358705161855
+"F","LACTATING","income",3976,0.869641294838145
+"M","MATING","capital",2189,0.685562167240839
+"M","MATING","income",1004,0.314437832759161
+"M","LACTATING","capital",1769,0.209274813675618
+"M","LACTATING","income",6684,0.790725186324382

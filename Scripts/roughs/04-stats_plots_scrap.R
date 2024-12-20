@@ -70,6 +70,7 @@ summary_table
 #save
 write.csv(summary_table, "Output/feeding_summary_4way.csv", row.names = FALSE)
 
+
 # Kruskal-Wallis and post-hoc pairwise tests ------------------------------
 #create a group column
 feeding_within_territory <- feeding_within_territory %>%
@@ -86,20 +87,6 @@ dunn_results <- dunn.test(
   method = "bonferroni")
 
 dunn_results
-
-#summary stats by group
-group_summary <- feeding_within_territory %>%
-  group_by(group) %>%
-  summarize(
-    mean_distance = mean(distance_to_midden, na.rm = TRUE),
-    median_distance = median(distance_to_midden, na.rm = TRUE),
-    max_distance = max(distance_to_midden, na.rm = TRUE),
-    sd_distance = sd(distance_to_midden, na.rm = TRUE),
-    n = n(),
-    .groups = "drop"
-  )
-
-group_summary
 
 # plot --------------------------------------------------------------------
 #add grouping columns to the main dataset
