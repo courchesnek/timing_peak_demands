@@ -6,8 +6,7 @@ source("Scripts/00-packages.R")
 con <- krsp_connect (host = "krsp.cepb5cjvqban.us-east-2.rds.amazonaws.com",
                      dbname ="krsp",
                      username = Sys.getenv("krsp_user"),
-                     password = Sys.getenv("krsp_password")
-)
+                     password = Sys.getenv("krsp_password"))
 
 #pull in census table
 census <- tbl(con,"census") %>%
@@ -53,7 +52,6 @@ census_locs$reflo[census_locs$locx == "-0.4" & census_locs$locy == "13.6"] <- "-
 census_locs$reflo[census_locs$locx == "-0.5" & census_locs$locy == "5.5"] <- "-0.5."
 census_locs$reflo[census_locs$locx == "-1.2" & census_locs$locy == "14.5"] <- "-114."
 
-
 # create new locx/locy columns --------------------------------------------
 #split into subtables
 negatives <- census_locs %>%
@@ -96,8 +94,7 @@ letter_with_dot <- letter_with_dot %>%
       nchar(reflo) >= 4 & (substr(reflo, 4, 4) == "." | substr(reflo, 5, 5) == "."),
       paste0(locy, "5"),  #add .5 if decimal is in the 4th or 5th position of reflo
       paste0(locy, ".0")   #add .0 if no decimal in the 4th or 5th position of reflo
-    )
-  )
+    ))
 
 #fix weird reflos/locs
 letter_with_dot <- letter_with_dot %>%
@@ -132,15 +129,13 @@ letter_with_dot <- letter_with_dot %>%
 letter_with_dot <- letter_with_dot %>%
   mutate(
     reflo = ifelse(census_date == as.Date("2020-05-15") & gr == "SU" & squirrel_id == 24314, "T.4.", reflo),
-    locy = ifelse(census_date == as.Date("2020-05-15") & gr == "SU" & squirrel_id == 24314, "4.5", locy)
-  )
+    locy = ifelse(census_date == as.Date("2020-05-15") & gr == "SU" & squirrel_id == 24314, "4.5", locy))
 
 letter_with_dot <- letter_with_dot %>%
   mutate(
     reflo = ifelse(census_date == as.Date("2012-05-15") & gr == "SU" & squirrel_id == 13130, "H4", reflo),
     locx = ifelse(census_date == as.Date("2012-05-15") & gr == "SU" & squirrel_id == 13130, "H.0", locx),
-    locy = ifelse(census_date == as.Date("2012-05-15") & gr == "SU" & squirrel_id == 13130, "4.0", locy)
-  )
+    locy = ifelse(census_date == as.Date("2012-05-15") & gr == "SU" & squirrel_id == 13130, "4.0", locy))
 
 letter_with_dot$reflo[letter_with_dot$locx == "A.5" & letter_with_dot$locy == "12.5"] <- "A.12."
 
@@ -166,17 +161,13 @@ letter_without_dot <- letter_without_dot %>%
       nchar(locy) >= 2 & (substr(locy, 2, 2) == "." | substr(locy, 3, 3) == "."),
       paste0(locy, "5"),  #append 5 if there is a decimal in the 2nd or 3rd position
       paste0(locy, ".0")   #append .0 if no decimal in the 2nd or 3rd position
-    )
-  )
+    ))
 
 #fix weird reflos/locs
 letter_without_dot <- letter_without_dot %>%
   mutate(
     reflo = ifelse(census_date == as.Date("2012-05-15") & gr == "LL" & squirrel_id == 12372, "U-0.", reflo),
-    locy = ifelse(census_date == as.Date("2012-05-15") & gr == "LL" & squirrel_id == 12372, "-0.5", locy)
-  )
-
-
+    locy = ifelse(census_date == as.Date("2012-05-15") & gr == "LL" & squirrel_id == 12372, "-0.5", locy))
 
 #split again based on dots for negatives ---------------------------------------------------------------
 negatives_with_dot <- negatives %>%
@@ -206,8 +197,7 @@ negatives_with_dot <- negatives_with_dot %>%
       nchar(locy) >= 2 & (substr(locy, 2, 2) == "." | substr(locy, 3, 3) == "."),
       paste0(locy, "5"),  #append 5 if there is a decimal in the 2nd or 3rd position
       paste0(locy, ".0")   #append .0 if no decimal in the 2nd or 3rd position
-    )
-  )
+    ))
 
 ##without dot
 #create locx and locy columns
@@ -227,10 +217,7 @@ negatives_without_dot <- negatives_without_dot %>%
       nchar(locy) >= 2 & (substr(locy, 2, 2) == "." | substr(locy, 3, 3) == "."),
       paste0(locy, "5"),  #append 5 if there is a decimal in the 2nd or 3rd position
       paste0(locy, ".0")   #append .0 if no decimal in the 2nd or 3rd position
-    )
-  )
-
-
+    ))
 
 #split the zeros based on dots ----------------------------------------
 zeros_with_dot <- zeros %>%
@@ -257,9 +244,7 @@ zeros_with_dot <- zeros_with_dot %>%
       nchar(locy) >= 2 & (substr(locy, 2, 2) == "." | substr(locy, 3, 3) == "."),
       paste0(locy, "5"),  #append 5 if there is a decimal in the 2nd or 3rd position
       paste0(locy, ".0")   #append .0 if no decimal in the 2nd or 3rd position
-    )
-  )
-
+    ))
 
 #create locx and locy columns
 zeros_without_dot <- zeros_without_dot %>%
@@ -280,42 +265,13 @@ zeros_without_dot <- zeros_without_dot %>%
       nchar(locy) >= 2 & (substr(locy, 2, 2) == "." | substr(locy, 3, 3) == "."),
       paste0(locy, "5"),  #append 5 if there is a decimal in the 2nd or 3rd position
       paste0(locy, ".0")   #append .0 if no decimal in the 2nd or 3rd position
-    )
-  )
-
+    ))
 
 #fix weird reflos/locs
 zeros_without_dot <- zeros_without_dot %>%
   mutate(
     locx = ifelse(reflo == "0.-0", "0.5", locx),
     locy = ifelse(reflo == "0.-0", "-0.0", locy))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # merge all tables back together ------------------------------------------
 census_clean <- bind_rows(
@@ -324,43 +280,16 @@ census_clean <- bind_rows(
   negatives_with_dot,
   negatives_without_dot,
   zeros_with_dot,
-  zeros_without_dot
-)
+  zeros_without_dot)
 
 write.csv(census_clean, "Input/census_clean.csv", row.names = FALSE)
 
-
 # add census locs to feeding obs ------------------------------------------
-
-#add year columns
-# cone_feeding <- cone_feeding %>%
-#   mutate(year = format(as.Date(date), "%Y"))
-# 
-# income_feeding <- income_feeding %>%
-#   mutate(year = format(as.Date(date), "%Y"))
-
 all_feeding <- all_feeding %>%
   mutate(year = format(as.Date(date), "%Y"))
 
 census_clean <- census_clean %>%
   mutate(year = format(as.Date(census_date), "%Y"))
-
-#merge tables by squirrel_id and by year
-# cone_feeding_census <- cone_feeding %>%
-#   left_join(census_clean %>%
-#       dplyr::select(squirrel_id, year, locx, locy),
-#     by = c("squirrel_id", "year"), relationship = "many-to-many") %>%
-#   rename(locx_census = locx.y, locy_census = locy.y, locx_obs = locx.x, locy_obs = locy.x)
-# 
-# write.csv(cone_feeding_census, "Input/cone_feeding_census.csv", row.names = FALSE)
-# 
-# income_feeding_census <- income_feeding %>%
-#   left_join(census_clean %>%
-#       dplyr::select(squirrel_id, year, locx, locy),
-#       by = c("squirrel_id", "year"), relationship = "many-to-many") %>%
-#   rename(locx_census = locx.y, locy_census = locy.y, locx_obs = locx.x, locy_obs = locy.x)
-# 
-# write.csv(income_feeding_census, "Input/income_feeding_census.csv", row.names = FALSE)
 
 all_feeding_census <- all_feeding %>%
   left_join(census_clean %>%
@@ -368,11 +297,5 @@ all_feeding_census <- all_feeding %>%
             by = c("squirrel_id", "year"), relationship = "many-to-many") %>%
   rename(locx_census = locx.y, locy_census = locy.y, locx_obs = locx.x, locy_obs = locy.x)
 
+#save
 write.csv(all_feeding_census, "Input/all_feeding_census.csv", row.names = FALSE)
-
-
-
-
-
-
-

@@ -6,8 +6,7 @@ source("Scripts/00-packages.R")
 con <- krsp_connect (host = "krsp.cepb5cjvqban.us-east-2.rds.amazonaws.com",
                      dbname ="krsp",
                      username = Sys.getenv("krsp_user"),
-                     password = Sys.getenv("krsp_password")
-)
+                     password = Sys.getenv("krsp_password"))
 
 #pull in tables
 behaviour <- tbl(con,"behaviour") %>%
@@ -18,8 +17,7 @@ litters <- tbl(con,"litter") %>%
 
 #pull feeding obs from behaviour table
 numeric_to_month_abbrev <- function(month_num) {
-  month.abb[month_num]
-}
+  month.abb[month_num]}
 
 feeding <- behaviour %>%
   collect() %>%
@@ -28,8 +26,7 @@ feeding <- behaviour %>%
   filter(behaviour == 1,  #feeding observations
          mode %in% c(1,3)) %>%
   mutate(
-    year = year(ymd(date))
-  )
+    year = year(ymd(date)))
 
 #we still need the sex of the squirrels here so let's connect to the flastall (first_last_all contains first last records of squirrels and is really handy for this type of stuff)... 
 # ...pull squirrel_id and sex, then link that to the feeding table
@@ -50,14 +47,13 @@ length(feeding$sex[is.na(feeding$sex) == TRUE])
 litters$fieldBDate <- as.Date(litters$fieldBDate)
 
 breeding_lac <- litters %>%
-  filter(year(fieldBDate) >= 1987 & year(fieldBDate) <= 2023, ln ==1) %>%
+  filter(year(fieldBDate) >= 1987 & year(fieldBDate) <= 2023, ln ==1) %>% #first litters only
   group_by(year = year(fieldBDate)) %>%
   summarise(
     earliest_birth_date = min(fieldBDate),
     latest_birth_date = max(fieldBDate),
     breeding_start = min(fieldBDate) - days(35),
-    breeding_end = max(fieldBDate) - days(35)
-  )
+    breeding_end = max(fieldBDate) - days(35))
 
 ##calculate lac windows; earliest fieldBDate = start and +70 days from latest fieldBDate = end
 breeding_lac <- breeding_lac %>%
@@ -73,8 +69,7 @@ feeding <- feeding %>%
       date >= earliest_birth_date & date <= latest_birth_date ~ "MATING",
       date > latest_birth_date & date <= end_lactation ~ "LACTATING",
       TRUE ~ NA_character_  #assign NA if the date doesn't fall within any window
-    )
-  )
+    ))
 
 feeding <- feeding %>%
   dplyr::select(squirrel_id, sex, date, repro_stage, detail, grid, locx, locy) %>%
@@ -105,24 +100,41 @@ feeding <- feeding %>%
 #     (sex == "M" & repro_stage == "MATING") |
 #       (sex == "F" & repro_stage == "LACTATING"))
 
+#create a column for snow cover
+feeding <- feeding %>%
+  mutate(
+    snow = case_when(
+      #snow period: October 15 to May 14
+      (month(date) %in% c(11, 12, 1, 2, 3, 4) | 
+         (month(date) == 10 & day(date) >= 15) | 
+         (month(date) == 5 & day(date) <= 14)) ~ "snow",
+      
+      #no-snow period: May 15 to October 14
+      (month(date) %in% c(6, 7, 8, 9) | 
+         (month(date) == 10 & day(date) <= 14) | 
+         (month(date) == 5 & day(date) >= 15)) ~ "no snow",
+      
+      #default: this should never trigger if the above cases are correct
+      TRUE ~ "error"))
+
+#only keep control grids - CH/KL/SU
+feeding <- feeding %>%
+  filter(grid %in% c("KL", "SU", "CH"))
+
+#add year type column
+##define mast years
+mast_years <- c(1993, 1998, 2005, 2010, 2014, 2019, 2022)
+
+# Add a column for year_type
+feeding <- feeding %>%
+  mutate(
+    year = as.numeric(format(as.Date(date, format = "%Y-%m-%d"), "%Y")), # Extract year from date
+    year_type = case_when(
+      year %in% mast_years ~ "mast",
+      year %in% (mast_years + 1) ~ "post-mast",
+      TRUE ~ "non-mast"))
+
 #save
 write.csv(feeding, "Input/allfeedingobs.csv", row.names = FALSE)
-
-#feeding only on cones
-# feed_cones <- feeding %>%
-#   filter(food_type == "capital")
-# 
-# #save
-# write.csv(feed_cones, "Input/conefeedingobs.csv", row.names = FALSE)
-# 
-# #feeding only income resources
-# feed_income <- feeding %>%
-#   filter(food_type == "income")
-# 
-# #save
-# write.csv(feed_income, "Input/incomefeedingobs.csv", row.names = FALSE)
-
-
-
 
 
