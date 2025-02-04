@@ -54,7 +54,7 @@ feed_offmid <- feeding_within_territory %>%
 distribution <- ggplot(feed_offmid, aes(x = distance_to_midden)) +
   geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
   labs(
-    x = "Distance to Midden (m)",
+    x = "Distance to midden (m)",
     y = "Frequency") +
   theme_minimal() +
   xlim(0,125)
@@ -63,8 +63,23 @@ distribution
 
 ggsave("Output/distribution_capital.jpeg", plot = distribution, width = 8, height = 6)
 
+##since distance_to_midden is continuous and non-normally distributed, log transform
+feed_offmid <- feed_offmid %>%
+  mutate(log_distance = log(distance_to_midden + 1)) #add 1 to avoid log(0)
+
+distribution_log <- ggplot(feed_offmid, aes(x = log_distance)) +
+  geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
+  labs(
+    x = "Distance to midden log-transformed",
+    y = "Frequency") +
+  theme_minimal()
+
+distribution_log
+
+ggsave("Output/distribution_capital_logged.jpeg", plot = distribution_log, width = 8, height = 6)
+
 # summary statistics ------------------------------------------------------
-summary_stats <- feed_offmid %>%
+summary_stats <- feeding_within_territory %>%
   group_by(sex, snow, repro_stage, year_type) %>%
   mutate(
     location = case_when(
@@ -81,16 +96,16 @@ summary_stats <- feed_offmid %>%
 
 print(summary_stats)
 
+#save
+write.csv(summary_stats, "Output/summary_stats.csv", row.names = FALSE)
+
+
 #interactions?
 ggplot(feed_offmid, aes(x = repro_stage, y = distance_to_midden, color = sex)) +
   geom_boxplot() +
   facet_grid(~ year_type)
 
 # model -------------------------------------------------------------------
-##since distance_to_midden is continuous and non-normally distributed, log transform
-feed_offmid <- feed_offmid %>%
-  mutate(log_distance = log(distance_to_midden + 1)) #add 1 to avoid log(0)
-
 #ensure year_type is a factor and set the correct order
 feed_offmid <- feed_offmid %>%
   mutate(year_type = factor(year_type, levels = c("mast", "post-mast", "non-mast")))
@@ -106,9 +121,16 @@ model_year <- lmer(
   data = feed_offmid,
   na.action = na.omit)
 
-AIC(model_year) #model with year type is better - delta AIC of 50.125
+AIC(model_year) #model with year type is better
 
-summary(model_year)
+model_summary <- summary(model_year)
+
+#save csv
+fixed_effects <- as.data.frame(model_summary$coefficients)
+fixed_effects$Term <- rownames(fixed_effects)  #add a column for the term names
+rownames(fixed_effects) <- NULL  #remove row names for cleaner output
+fixed_effects <- fixed_effects[, c("Term", "Estimate", "Std. Error", "t value", "Pr(>|t|)")]
+write.csv(fixed_effects, "Output/model_summary.csv", row.names = FALSE)
 
 #calculate the effect size of the model
 r2_values <- r.squaredGLMM(model_year)
@@ -127,13 +149,21 @@ results <- round(results, 3)
 results$Lower_CI <- results$Estimate - 1.96 * results$`Std. Error`
 results$Upper_CI <- results$Estimate + 1.96 * results$`Std. Error`
 
+#add predictor names for clarity
+results$Predictor <- rownames(results)
+
 #print the table
 print(results)
 
 # plot ---------------------------------------------------------------------
-predictions <- ggpredict(model_year, terms = c("repro_stage", "sex", "year_type"))
+predictions <- ggpredict(
+  model_year,
+  terms = c(
+    "repro_stage [MATING, LACTATING]", 
+    "sex [F, M]", 
+    "year_type [mast, post-mast, non-mast]"))
 
-ggplot(predictions, aes(x = x, y = predicted, color = group, group = group)) +
+results_predict <- ggplot(predictions, aes(x = x, y = predicted, color = group, group = group)) +
   geom_line(size = 1) +  #line for each group
   geom_point(size = 2, position = position_dodge(0.2)) +  #points for estimates
   facet_wrap(~facet, scales = "free") +  #separate by year_type
@@ -144,18 +174,55 @@ ggplot(predictions, aes(x = x, y = predicted, color = group, group = group)) +
     color = "Sex") +
   theme_minimal()
 
-#jtools effectplot
-effect_plot <- interact_plot(
-  model = model_year,  #the fitted linear mixed model
-  pred = repro_stage,  #predictor on the x-axis (reproductive stage)
-  modx = year_type,    #moderator (year type)
-  mod2 = sex,          #second moderator (sex)
-  outcome.scale = "response",  #plot on the response scale (log feeding distance)
-  x.label = "Reproductive Stage",
-  y.label = "Predicted Feeding Distance (Log Scale)",
-  main.title = "Interaction Effects of Year Type, Sex, and Reproductive Stage")
+results_predict
 
-effect_plot
+dodge <- position_dodge(0.2)  #define dodge position for consistency
+
+feeding_distances <- ggplot(predictions, aes(x = x, y = predicted, color = group, group = group)) +
+  geom_line(size = 1, position = dodge) +  #line for each group
+  geom_point(size = 2, position = dodge) +  #points for estimates
+  geom_errorbar(
+    aes(ymin = conf.low, ymax = conf.high),
+    width = 0.2,
+    position = dodge,
+    size = 0.8) +  #confidence intervals
+  facet_wrap(~facet, scales = "free", ncol = 3, labeller = labeller(facet = c("mast" = "Mast", "post-mast" = "Post-mast", "non-mast" = "Non-mast"))) +  #separate by year_type
+  labs(
+    title = "Predicted Feeding Distances by Sex, Reproductive Stage, and Year Type",
+    x = "Reproductive Stage",
+    y = "Log Feeding Distance",
+    color = "Sex") +
+  scale_x_discrete(labels=c("Mating", "Lactating")) +
+  scale_color_manual(
+    values = c("F" = "#FF66FF", "M" = "#0066FF"),
+    labels = c("Female", "Male")) + 
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    strip.text = element_text(size = 14, face = "bold"),
+    panel.grid.major = element_line(linewidth = 0.5, linetype = "dotted", color = "grey80"))
+
+feeding_distances
+
+#save
+ggsave("Output/feeding_distances.jpeg", plot = feeding_distances, width = 10, height = 6)
+
+# #jtools effectplot - doesn't match the results from the model output????
+# effect_plot <- interact_plot(
+#   model = model_year,  #the fitted linear mixed model
+#   pred = repro_stage,  #predictor on the x-axis (reproductive stage)
+#   modx = year_type,    #moderator (year type)
+#   mod2 = sex,          #second moderator (sex)
+#   outcome.scale = "response",  #plot on the response scale (log feeding distance)
+#   x.label = "Reproductive Stage",
+#   y.label = "Predicted Feeding Distance (Log Scale)",
+#   main.title = "Interaction Effects of Year Type, Sex, and Reproductive Stage")
+# 
+# effect_plot
 
 #box-whisker
 box_whisker <- ggplot(results, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
@@ -173,6 +240,53 @@ box_whisker <- ggplot(results, aes(x = reorder(Predictor, Estimate), y = Estimat
     axis.text.y = element_text(size = 10))
 
 box_whisker
+
+# convert log_distance back to meters to report results -------------------
+predictions <- predictions %>%
+  rowwise() %>%
+  mutate(
+    distance_meters = exp(predicted),
+    lower_ci_meters = exp(conf.low),
+    upper_ci_meters = exp(conf.high)) %>%
+  ungroup()
+
+head(predictions)
+
+#plot distance in meters
+dodge <- position_dodge(0.2)  #define dodge position for consistency
+
+feeding_distances_meters <- ggplot(predictions, aes(x = x, y = distance_meters, color = group, group = group)) +
+  geom_line(size = 1, position = dodge) +  # Line for each group
+  geom_point(size = 2, position = dodge) +  # Points for estimates
+  geom_errorbar(
+    aes(ymin = lower_ci_meters, ymax = upper_ci_meters),  # Use converted CI in meters
+    width = 0.2,
+    position = dodge,
+    size = 0.8) +  # Confidence intervals
+  facet_wrap(~facet, scales = "free", ncol = 3, labeller = labeller(facet = c("mast" = "Mast", "post-mast" = "Post-mast", "non-mast" = "Non-mast"))) +  # Separate by year_type
+  labs(
+    title = "Predicted Feeding Distances by Sex, Reproductive Stage, and Year Type",
+    x = "Reproductive Stage",
+    y = "Predicted Feeding Distance (m)",  # Update y-axis label
+    color = "Sex") +
+  scale_x_discrete(labels = c("Mating", "Lactating")) +
+  scale_color_manual(
+    values = c("F" = "#FF66FF", "M" = "#0066FF"),
+    labels = c("Female", "Male")) + 
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    strip.text = element_text(size = 14, face = "bold"),
+    panel.grid.major = element_line(linewidth = 0.5, linetype = "dotted", color = "grey80"))
+
+feeding_distances_meters
+
+#save
+ggsave("Output/feeding_distances_meters.jpeg", plot = feeding_distances_meters, width = 10, height = 6)
 
 
 
