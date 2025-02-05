@@ -1,7 +1,7 @@
 #load packages
 source("Scripts/00-packages.R")
 
-#read in data --------------------------------------------------------
+#read in data
 feeding <- read.csv("Input/feeding_distances.csv")
 
 #filter for within territory and only capital
@@ -17,7 +17,7 @@ feeding_within_territory <- feeding_within_territory %>%
 feeding_within_territory <- feeding_within_territory %>%
   mutate(year_type = factor(year_type, levels = c("mast", "post-mast", "non-mast")))
 
-#compare prop of on vs off midden feeding events between the sexes ----------------
+#compare prop of on vs off midden feeding events between the sexes
 feeding_proportions <- feeding_within_territory %>%
   group_by(sex, snow, year_type, repro_stage, within_midden) %>%
   summarise(
@@ -29,15 +29,15 @@ feeding_proportions <- feeding_within_territory %>%
 
 #plot proportions
 feeding_proportions_plot <- ggplot(feeding_proportions, 
-                                   aes(x = year_type, y = proportion, fill = within_midden)) +
+  aes(x = year_type, y = proportion, fill = within_midden)) +
   geom_bar(stat = "identity", position = "fill") +
   facet_grid(repro_stage ~ snow + sex) +  #separate by repro stage, snow condition and sex
   scale_fill_manual(values = c("#33CC66", "#996600"), 
                     labels = c("Off Midden", "On Midden")) +
   labs(
-    title = "Proportion of Capital Feeding Events On Midden vs Off Midden by Reproductive Stage",
+    title = "Proportion of Old Cone Feeding Events On Midden vs Off Midden (5m radius buffer) by Reproductive Stage",
     x = "Year Type",
-    y = "Proportion of Capital Feeding Events",
+    y = "Proportion of Old Cone Feeding Events",
     fill = "Location") +
   theme_minimal() +
   theme(
@@ -46,7 +46,10 @@ feeding_proportions_plot <- ggplot(feeding_proportions,
 
 feeding_proportions_plot
 
-#off-midden feeding events only for analysis, since on-midden events overwhelm the data --------
+#save
+ggsave("Output/feeding_proportions.jpeg", plot = feeding_proportions_plot, width = 10, height = 6)
+
+#off-midden feeding events only for analysis, since on-midden events overwhelm the data
 feed_offmid <- feeding_within_territory %>%
   filter(within_midden == FALSE)
 
@@ -99,6 +102,7 @@ print(summary_stats)
 #save
 write.csv(summary_stats, "Output/summary_stats.csv", row.names = FALSE)
 
+
 #interactions?
 ggplot(feed_offmid, aes(x = repro_stage, y = distance_to_midden, color = sex)) +
   geom_boxplot() +
@@ -109,25 +113,20 @@ ggplot(feed_offmid, aes(x = repro_stage, y = distance_to_midden, color = sex)) +
 feed_offmid <- feed_offmid %>%
   mutate(year_type = factor(year_type, levels = c("mast", "post-mast", "non-mast")))
 
-#let's compare models
-##ensure na.action is set for MuMIn
-options(na.action = "na.fail")
+#fit a mixed-effect model
+model_snow <- lmer(
+  log_distance ~ sex * repro_stage * snow + year_type + (1 | squirrel_id),
+  data = feed_offmid,
+  na.action = na.omit)
 
-#full model with all predictors and interactions
-full_model <- lmer(log_distance ~ sex * repro_stage * year_type + snow + (1 | squirrel_id),
-                   data = feed_offmid, REML = FALSE)
+model_year <- lmer(
+  log_distance ~ sex * repro_stage * year_type + snow + (1 | squirrel_id), 
+  data = feed_offmid,
+  na.action = na.omit)
 
-#generate all possible models
-model_set <- dredge(full_model)
+AIC(model_year) #model with year type is better
 
-#print model selection table
-model_set_df <- as.data.frame(model_set)
-
-#winning model!
-model <- lmer(log_distance ~ sex * repro_stage * year_type + snow + (1 | squirrel_id), 
-              data = feed_offmid, REML = FALSE)
-
-model_summary <- summary(model)
+model_summary <- summary(model_year)
 
 #save csv
 fixed_effects <- as.data.frame(model_summary$coefficients)
@@ -137,11 +136,11 @@ fixed_effects <- fixed_effects[, c("Term", "Estimate", "Std. Error", "t value", 
 write.csv(fixed_effects, "Output/model_summary.csv", row.names = FALSE)
 
 #calculate the effect size of the model
-r2_values <- r.squaredGLMM(model)
+r2_values <- r.squaredGLMM(model_year)
 print(r2_values)
 
 #extract results to a table
-results <- as.data.frame(summary(model)$coefficients)
+results <- as.data.frame(summary(model_year)$coefficients)
 
 #add meaningful column names
 colnames(results) <- c("Estimate", "Std. Error", "df", "t value", "Pr(>|t|)")
@@ -161,11 +160,24 @@ print(results)
 
 # plot ---------------------------------------------------------------------
 predictions <- ggpredict(
-  model,
+  model_year,
   terms = c(
     "repro_stage [MATING, LACTATING]", 
     "sex [F, M]", 
     "year_type [mast, post-mast, non-mast]"))
+
+results_predict <- ggplot(predictions, aes(x = x, y = predicted, color = group, group = group)) +
+  geom_line(size = 1) +  #line for each group
+  geom_point(size = 2, position = position_dodge(0.2)) +  #points for estimates
+  facet_wrap(~facet, scales = "free") +  #separate by year_type
+  labs(
+    title = "Predicted Feeding Distances by Sex, Reproductive Stage, and Year Type",
+    x = "Reproductive Stage",
+    y = "Log Feeding Distance",
+    color = "Sex") +
+  theme_minimal()
+
+results_predict
 
 dodge <- position_dodge(0.2)  #define dodge position for consistency
 
@@ -278,71 +290,6 @@ feeding_distances_meters
 
 #save
 ggsave("Output/feeding_distances_meters.jpeg", plot = feeding_distances_meters, width = 10, height = 6)
-
-
-# do cached cones correlate with feeding distances? -----------------------
-#read in cone data
-midden_cones <- read.csv("Input/midden_cones.csv")
-
-#filter for only positive caching events
-positive_caches <- midden_cones %>%
-  filter(log_cache_size_new > 0)
-
-#join feeding obs and cones
-feeding_cones <- feed_offmid %>%
-  inner_join(positive_caches, by = c("squirrel_id", "sex", "grid", "year"), relationship = "many-to-many")
-
-#fit a linear mixed-effects model
-feeding_cones_model <- lmer(
-  log_distance ~ log_cache_size_new + log_total_cones + (1 | squirrel_id),
-  data = feeding_cones,
-  REML = FALSE)
-
-#model summary
-summary(feeding_cones_model)
-
-#transform the log variables back to their original scale
-feeding_cones_transformed <- feeding_cones %>%
-  mutate(
-    distance_meters = exp(log_distance), 
-    cache_size_new = exp(log_cache_size_new),  
-    total_cones = exp(log_total_cones))
-
-#plot feeding distance in meters vs. cache size (new cones)
-ggplot(feeding_cones_transformed, aes(x = cache_size_new, y = distance_meters, color = sex)) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(method = "lm", se = TRUE) +
-  labs(
-    title = "Relationship Between Feeding Distance (m) and Number of New Cones Cached by Sex",
-    x = "New Cones Cached",
-    y = "Feeding Distance (m)",
-    color = "Sex") +
-  scale_color_manual(values = c("F" = "#FF66FF", "M" = "#0066FF"), labels = c("Female", "Male")) +
-  facet_wrap(~sex, scales = "free_x") +  # Separate by sex
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-    axis.title = element_text(size = 14),
-    axis.text = element_text(size = 12),
-    legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12),
-    strip.text = element_text(size = 14, face = "bold"))
-
-#let's extend the model by adding other variables
-global_model <- lmer(
-  log_distance ~ log_cache_size_new * sex * repro_stage * year_type * snow +
-    (1 | squirrel_id),
-  data = feeding_cones,
-  REML = FALSE)
-
-
-
-
-
-
-
-
-
 
 
 
