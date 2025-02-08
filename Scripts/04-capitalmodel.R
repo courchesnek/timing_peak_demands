@@ -11,7 +11,7 @@ feeding_within_territory <- feeding %>%
 
 #reorder the levels of repro_stage
 feeding_within_territory <- feeding_within_territory %>%
-  mutate(repro_stage = factor(repro_stage, levels = c("MATING", "LACTATING")))
+  mutate(repro_stage = factor(repro_stage, levels = c("mating", "lactation", "non-breeding")))
 
 #reorder levels of year type
 feeding_within_territory <- feeding_within_territory %>%
@@ -27,6 +27,8 @@ feeding_proportions <- feeding_within_territory %>%
   mutate(
     proportion = total_events / sum(total_events))
 
+feeding_proportions$snow <- factor(feeding_proportions$snow, levels = c("snow", "no snow"))
+
 #plot proportions
 feeding_proportions_plot <- ggplot(feeding_proportions, 
                                    aes(x = year_type, y = proportion, fill = within_midden)) +
@@ -35,7 +37,7 @@ feeding_proportions_plot <- ggplot(feeding_proportions,
   scale_fill_manual(values = c("#33CC66", "#996600"), 
                     labels = c("Off Midden", "On Midden")) +
   labs(
-    title = "Proportion of Capital Feeding Events On Midden vs Off Midden by Reproductive Stage",
+    title = "Proportion of Capital Feeding Events On Midden vs Off Midden by Reproductive Stage and Snow Cover",
     x = "Year Type",
     y = "Proportion of Capital Feeding Events",
     fill = "Location") +
@@ -45,6 +47,9 @@ feeding_proportions_plot <- ggplot(feeding_proportions,
     strip.text = element_text(size = 10))
 
 feeding_proportions_plot
+
+#save
+ggsave("Output/feeding_proportions.jpeg", plot = feeding_proportions_plot, width = 8, height = 6)
 
 #off-midden feeding events only for analysis, since on-midden events overwhelm the data --------
 feed_offmid <- feeding_within_territory %>%
@@ -109,22 +114,7 @@ ggplot(feed_offmid, aes(x = repro_stage, y = distance_to_midden, color = sex)) +
 feed_offmid <- feed_offmid %>%
   mutate(year_type = factor(year_type, levels = c("mast", "post-mast", "non-mast")))
 
-#let's compare models
-##ensure na.action is set for MuMIn
-options(na.action = "na.fail")
-
-#full model with all predictors and interactions
-full_model <- lmer(log_distance ~ sex * repro_stage * year_type + snow + (1 | squirrel_id),
-                   data = feed_offmid, REML = FALSE)
-
-#generate all possible models
-model_set <- dredge(full_model)
-
-#print model selection table
-model_set_df <- as.data.frame(model_set)
-
-#winning model!
-model <- lmer(log_distance ~ sex * repro_stage * year_type + snow + (1 | squirrel_id), 
+model <- lmer(log_distance ~ sex * repro_stage + year_type + snow + (1 | squirrel_id), 
               data = feed_offmid, REML = FALSE)
 
 model_summary <- summary(model)
@@ -160,79 +150,9 @@ results$Predictor <- rownames(results)
 print(results)
 
 # plot ---------------------------------------------------------------------
-predictions <- ggpredict(
-  model,
-  terms = c(
-    "repro_stage [MATING, LACTATING]", 
-    "sex [F, M]", 
-    "year_type [mast, post-mast, non-mast]"))
+predictions <- ggpredict(model, terms = c("sex [F, M]", "repro_stage [mating, lactation, non-breeding]"))
 
-dodge <- position_dodge(0.2)  #define dodge position for consistency
-
-feeding_distances <- ggplot(predictions, aes(x = x, y = predicted, color = group, group = group)) +
-  geom_line(size = 1, position = dodge) +  #line for each group
-  geom_point(size = 2, position = dodge) +  #points for estimates
-  geom_errorbar(
-    aes(ymin = conf.low, ymax = conf.high),
-    width = 0.2,
-    position = dodge,
-    size = 0.8) +  #confidence intervals
-  facet_wrap(~facet, scales = "free", ncol = 3, labeller = labeller(facet = c("mast" = "Mast", "post-mast" = "Post-mast", "non-mast" = "Non-mast"))) +  #separate by year_type
-  labs(
-    title = "Predicted Feeding Distances by Sex, Reproductive Stage, and Year Type",
-    x = "Reproductive Stage",
-    y = "Log Feeding Distance",
-    color = "Sex") +
-  scale_x_discrete(labels=c("Mating", "Lactating")) +
-  scale_color_manual(
-    values = c("F" = "#FF66FF", "M" = "#0066FF"),
-    labels = c("Female", "Male")) + 
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-    axis.title = element_text(size = 14),
-    axis.text = element_text(size = 12),
-    legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12),
-    strip.text = element_text(size = 14, face = "bold"),
-    panel.grid.major = element_line(linewidth = 0.5, linetype = "dotted", color = "grey80"))
-
-feeding_distances
-
-#save
-ggsave("Output/feeding_distances.jpeg", plot = feeding_distances, width = 10, height = 6)
-
-# #jtools effectplot - doesn't match the results from the model output????
-# effect_plot <- interact_plot(
-#   model = model_year,  #the fitted linear mixed model
-#   pred = repro_stage,  #predictor on the x-axis (reproductive stage)
-#   modx = year_type,    #moderator (year type)
-#   mod2 = sex,          #second moderator (sex)
-#   outcome.scale = "response",  #plot on the response scale (log feeding distance)
-#   x.label = "Reproductive Stage",
-#   y.label = "Predicted Feeding Distance (Log Scale)",
-#   main.title = "Interaction Effects of Year Type, Sex, and Reproductive Stage")
-# 
-# effect_plot
-
-#box-whisker
-box_whisker <- ggplot(results, aes(x = reorder(Predictor, Estimate), y = Estimate)) +
-  geom_point(size = 3, color = "blue") +
-  geom_errorbar(aes(ymin = Lower_CI, ymax = Upper_CI), width = 0.2, color = "blue") +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
-  coord_flip() +  #flip the coordinates for horizontal bars
-  labs(
-    title = "Effect Sizes of Fixed Effects in Feeding Distance Model",
-    x = "Predictor",
-    y = "Estimate (with 95% CI)") +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 14),
-    axis.text.y = element_text(size = 10))
-
-box_whisker
-
-# convert log_distance back to meters to report results -------------------
+#convert log_distance back to meters to report results
 predictions <- predictions %>%
   rowwise() %>%
   mutate(
@@ -241,44 +161,39 @@ predictions <- predictions %>%
     upper_ci_meters = exp(conf.high)) %>%
   ungroup()
 
-head(predictions)
+predictions <- predictions %>%
+  rename(sex = x, repro_stage = group)
 
-#plot distance in meters
-dodge <- position_dodge(0.2)  #define dodge position for consistency
-
-feeding_distances_meters <- ggplot(predictions, aes(x = x, y = distance_meters, color = group, group = group)) +
-  geom_line(size = 1, position = dodge) +  # Line for each group
-  geom_point(size = 2, position = dodge) +  # Points for estimates
+#plot distance in meters - violin plot
+feeding_distances_meters <- ggplot(predictions, aes(x = repro_stage, y = distance_meters, color = sex, group = sex)) +
+  geom_line(size = 1, position = position_dodge(0.2)) +  
+  geom_point(size = 2, position = position_dodge(0.2)) +  
   geom_errorbar(
-    aes(ymin = lower_ci_meters, ymax = upper_ci_meters),  # Use converted CI in meters
+    aes(ymin = lower_ci_meters, ymax = upper_ci_meters),
     width = 0.2,
-    position = dodge,
-    size = 0.8) +  # Confidence intervals
-  facet_wrap(~facet, scales = "free", ncol = 3, labeller = labeller(facet = c("mast" = "Mast", "post-mast" = "Post-mast", "non-mast" = "Non-mast"))) +  # Separate by year_type
+    size = 0.8,
+    position = position_dodge(0.2)) +
   labs(
-    title = "Predicted Feeding Distances by Sex, Reproductive Stage, and Year Type",
+    title = "Predicted Feeding Distances by Sex and Reproductive Stage",
     x = "Reproductive Stage",
-    y = "Predicted Feeding Distance (m)",  # Update y-axis label
+    y = "Feeding Distance (m)",
     color = "Sex") +
-  scale_x_discrete(labels = c("Mating", "Lactating")) +
+  scale_x_discrete(labels = c("Mating", "Lactating", "Non-breeding")) +
   scale_color_manual(
     values = c("F" = "#FF66FF", "M" = "#0066FF"),
-    labels = c("Female", "Male")) + 
+    labels = c("Female", "Male")) +
   theme_minimal() +
   theme(
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
     axis.title = element_text(size = 14),
     axis.text = element_text(size = 12),
     legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12),
-    strip.text = element_text(size = 14, face = "bold"),
-    panel.grid.major = element_line(linewidth = 0.5, linetype = "dotted", color = "grey80"))
+    legend.text = element_text(size = 12))
 
 feeding_distances_meters
 
 #save
 ggsave("Output/feeding_distances_meters.jpeg", plot = feeding_distances_meters, width = 10, height = 6)
-
 
 # do cached cones correlate with feeding distances? -----------------------
 #read in cone data
@@ -330,7 +245,7 @@ ggplot(feeding_cones_transformed, aes(x = cache_size_new, y = distance_meters, c
 
 #let's extend the model by adding other variables
 global_model <- lmer(
-  log_distance ~ log_cache_size_new * sex * repro_stage * year_type * snow +
+  log_distance ~ log_cache_size_new * sex + repro_stage + year_type + snow +
     (1 | squirrel_id),
   data = feeding_cones,
   REML = FALSE)

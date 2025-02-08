@@ -17,7 +17,7 @@ feeding$grid[feeding$squirrel_id == 20942] <- "SU"
 # create midden buffers to represent territory sizes and middens "islands" --------------------------
 #define the buffer sizes in "grid logic"
 buffer_radius <- 52 / 30 #52m buffer in grid terms - max territory size of 0.86ha according to LaMontagne
-midden_radius <- 5 / 30 #5m buffer in grid terms
+midden_radius <- 10 / 30 #10m buffer in grid terms
 
 #add buffer to midden locs = territory
 feeding <- feeding %>%
@@ -38,7 +38,7 @@ census_mids_buff <- ggplot(feeding, aes(x = locx_census_numeric, y = as.numeric(
       y0 = as.numeric(locy_census),
       r = buffer_radius),
     color = "red", fill = NA, alpha = 0.5) +
-  #add the 5m buffer (midden "island")
+  #add the 10m buffer (midden "island")
   geom_circle(
     aes(
       x0 = locx_census_numeric, 
@@ -52,7 +52,7 @@ census_mids_buff <- ggplot(feeding, aes(x = locx_census_numeric, y = as.numeric(
     title = "Middens and their territory radius by Grid",
     x = "locx",
     y = "locy") +
-  # Apply minimal theme
+  #apply minimal theme
   theme_minimal() +
   theme(
     strip.text = element_text(size = 10),
@@ -65,7 +65,7 @@ ggsave("Output/census_mids_buff.jpeg", plot = census_mids_buff, width = 8, heigh
 
 # distance feeding obs to midden ------------------------------------------
 buffer_radius_meters <- 52 #52m radius
-midden_radius_meters <- 5 #5m midden "island"
+midden_radius_meters <- 10 #10m midden "island"
 
 #calculate Euclidean distance and determine if within buffer
 feeding_distances <- feeding %>%
@@ -83,37 +83,3 @@ feeding_distances <- feeding %>%
 
 #save
 write.csv(feeding_distances, "Input/feeding_distances.csv", row.names = FALSE)
-
-# descriptive statistics --------------------------------------------------
-##calculate summary statistics of distance_to_midden by sex
-feeding_distances %>%
-  group_by(sex) %>%
-  summarize(
-    mean_distance = mean(distance_to_midden, na.rm = TRUE),
-    median_distance = median(distance_to_midden, na.rm = TRUE),
-    max_distance = max(distance_to_midden, na.rm = TRUE))
-
-summary(feeding_distances$distance_to_midden)
-
-#let's do that again but only for feeding events happening within territory (to exclude crazy distances likely caused by observer error)
-feeding_within_territory <- feeding_distances %>%
-  filter(within_territory == TRUE)
-
-feeding_summary <- feeding_within_territory %>%
-  mutate(
-    location = case_when(
-      within_midden ~ "on_midden",    #feeding event within midden radius
-      within_territory ~ "off_midden" #feeding event within territory but outside midden radius
-    )) %>%
-  group_by(sex, location, snow, year_type) %>% #group by sex and location (on/off midden)
-  summarize(
-    mean_distance = mean(distance_to_midden, na.rm = TRUE),
-    median_distance = median(distance_to_midden, na.rm = TRUE),
-    max_distance = max(distance_to_midden, na.rm = TRUE),
-    sd_distance = sd(distance_to_midden, na.rm = TRUE),
-    n = n(),
-    .groups = "drop")
-
-feeding_summary
-
-write.csv(feeding_summary, "Output/feeding_summary.csv", row.names = FALSE)

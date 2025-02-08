@@ -24,7 +24,7 @@ feeding <- behaviour %>%
   dplyr::select(id, behaviour, date, detail, grid, mode, squirrel_id, time, locx, locy) %>%
   collect() %>%
   filter(behaviour == 1,  #feeding observations
-         mode %in% c(1,3)) %>%
+         mode %in% c(1,3)) %>% #cas obs or focals
   mutate(
     year = year(ymd(date)))
 
@@ -40,7 +40,6 @@ feeding <- left_join(feeding, squirrel_sex, by = "squirrel_id") %>%
 
 #double check if any NAs in sex column
 length(feeding$sex[is.na(feeding$sex) == TRUE])
-
 
 ##calculate breeding windows; -35 days from earliest fieldBDate = start and -35 days from latest = end
 #ensure fieldBDate is in date format
@@ -61,19 +60,17 @@ breeding_lac <- breeding_lac %>%
     start_lactation = earliest_birth_date,  
     end_lactation = latest_birth_date + 70)
 
-#create a column for repro stage year for mating and lactating
+#create a column for repro stage by year for mating and lactating
 feeding <- feeding %>%
   left_join(breeding_lac, by = "year") %>%  #join the breeding window data by year
   mutate(
     repro_stage = case_when(
-      date >= earliest_birth_date & date <= latest_birth_date ~ "MATING",
-      date > latest_birth_date & date <= end_lactation ~ "LACTATING",
-      TRUE ~ NA_character_  #assign NA if the date doesn't fall within any window
-    ))
+      date >= earliest_birth_date & date <= latest_birth_date ~ "mating",
+      date > latest_birth_date & date <= end_lactation ~ "lactation",
+      TRUE ~ "non-breeding")) #anything outside of mating and lactation = non-breeding
 
 feeding <- feeding %>%
-  dplyr::select(squirrel_id, sex, date, repro_stage, detail, grid, locx, locy) %>%
-  na.omit(feeding$repro_stage)
+  dplyr::select(squirrel_id, sex, date, repro_stage, detail, grid, locx, locy)
 
 #fix weird detail entries 
 feeding <- feeding %>%
@@ -93,12 +90,6 @@ feeding <- feeding %>%
   mutate(food_type = ifelse(detail %in% income, "income", 
                             ifelse(detail == 2, "capital", NA))) %>%
   filter(!is.na(food_type))
-
-# #need to filter for only male events during mating and only female events during lactation - only want each sex during peak energy demands
-# filtered_feeding <- feeding %>%
-#   filter(
-#     (sex == "M" & repro_stage == "MATING") |
-#       (sex == "F" & repro_stage == "LACTATING"))
 
 #create a column for snow cover
 feeding <- feeding %>%
@@ -125,10 +116,10 @@ feeding <- feeding %>%
 ##define mast years
 mast_years <- c(1993, 1998, 2005, 2010, 2014, 2019, 2022)
 
-# Add a column for year_type
+#add a column for year_type
 feeding <- feeding %>%
   mutate(
-    year = as.numeric(format(as.Date(date, format = "%Y-%m-%d"), "%Y")), # Extract year from date
+    year = as.numeric(format(as.Date(date, format = "%Y-%m-%d"), "%Y")), #extract year from date
     year_type = case_when(
       year %in% mast_years ~ "mast",
       year %in% (mast_years + 1) ~ "post-mast",
