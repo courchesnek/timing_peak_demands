@@ -84,11 +84,12 @@ feeding <- feeding %>%
   filter(!(detail %in% c(10, 12, 14, 24, 25, 26, 30)))
 
 #group food types for comparisons
-income <- c(1, 3, 4, 5, 6, 7, 8, 9, 11, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 27, 28, 29, 31, 32)
+income <- c(1, 3, 5, 6, 7, 8, 9, 11, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 27, 28, 29, 31, 32) #income = all other natural resources found fresh on the landscape - UNCACHED
+capital <- c(2, 4) #capital = old cones and old mushrooms/truffles, CACHED
 
 feeding <- feeding %>%
   mutate(food_type = ifelse(detail %in% income, "income", 
-                            ifelse(detail == 2, "capital", NA))) %>%
+                            ifelse(detail %in% capital, "capital", NA))) %>%
   filter(!is.na(food_type))
 
 #create a column for snow cover
