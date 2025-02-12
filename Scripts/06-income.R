@@ -3,6 +3,7 @@ source("Scripts/00-packages.R")
 
 # read in data ----------------------------
 feeding <- read.csv("Input/all_feeding_census.csv")
+midden_cones <- read.csv("Input/midden_cones.csv")
 
 feeding <- feeding %>%
   mutate(date = as.Date(date)) %>%
@@ -200,7 +201,9 @@ detailed_feeding <- ggplot(feeding_summary, aes(x = season, y = proportion_event
       "new cone" = "#F0E442",
       "witch's broom" = "#D55E00",
       "new mushroom" = "#CC79A7",
-      "other" = "#999999")) +
+      "other" = "#999999"),
+    breaks = c("old cone", "old mushroom", "new cone", "new mushroom", "spruce buds", "witch's broom", "other"),
+    labels = c("Capital: Old Cone", "Capital: Old Mushroom", "Income: New Cone", "Income: New Mushroom", "Income: Spruce Buds", "Income: Witch's Broom", "Income: Other")) +
   theme_minimal() +
   theme(
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
@@ -209,7 +212,8 @@ detailed_feeding <- ggplot(feeding_summary, aes(x = season, y = proportion_event
     legend.title = element_text(size = 14),
     legend.text = element_text(size = 12),
     strip.text = element_text(size = 14, face = "bold"),
-    panel.spacing = unit(1, "lines"))
+    panel.spacing = unit(1, "lines"),
+    axis.text.x = element_text(angle = 45, hjust = 1))
 
 detailed_feeding
 
@@ -217,44 +221,79 @@ detailed_feeding
 ggsave("Output/feeding_sources.jpeg", plot = detailed_feeding, width = 10, height = 6)
 
 
-#Q1: Do food type proportions differ between sexes and across seasons? -----------------------------------------------
-#ensure food_type is a factor
+#Q1: Do food type preferences differ between sexes and across seasons, and does this difference explain cache size differences between males and females? -----------------------------------------------
+#ensure food_type is a factor in both datasets
 feeding <- feeding %>%
   mutate(food_type = factor(food_type),
          season = factor(season),
          sex = factor(sex),
          squirrel_id = factor(squirrel_id))
 
+midden_cones <- midden_cones %>%
+  mutate(squirrel_id = factor(squirrel_id))
+
 #relevel season to set non-breeding as the reference level
 feeding <- feeding %>%
   mutate(season = relevel(factor(season), ref = "non-breeding"))
 
-#let's run a GLMM binomial model to compare capital vs income feeding within one model while including squirrel id as a random effect
-model_foodtype <- glmer(food_type ~ sex * season + (1 | squirrel_id), 
-                        family = binomial, data = feeding,
-                        control = glmerControl(optimizer = "bobyqa", 
-                        optCtrl = list(maxfun = 200000, tol = 1e-06))) #increase maximum number of function evaluations
-#model baselines = capital, females, non-breeding
+#join cache sizes and feeding data
+feeding_cache <- left_join(feeding, midden_cones %>% 
+                dplyr::select(squirrel_id, year, log_cache_size_new, log_total_cones),
+                by = c("squirrel_id", "year")) %>%
+                na.omit()
 
-summary(model_foodtype)
-foodtype_summary <- tidy(model_foodtype)
-#positive estimate = preference for income resources
-#negative estimate = preference for capital resources (model baseline)
+#fit a GLMM with food_type as the response and cache size as a predictor
+##does your cache size influence your reliance on a food_type (i.e. since females have lower cache sizes, do they rely more on income resources than males do?)
+#first, scale cache size to improve convergence
+feeding_cache$log_cache_size_scaled <- scale(feeding_cache$log_cache_size_new)
 
-#calculate the odds ratios
-foodtype_summary$odds_ratio <- exp(foodtype_summary$estimate)
+model_foodtype <- glmer(food_type ~ log_cache_size_scaled + sex * season + log_total_cones + (1 | squirrel_id), 
+                          family = binomial(link = "logit"), 
+                          data = feeding_cache,
+                          control = glmerControl(optimizer = "bobyqa", 
+                          optCtrl = list(maxfun = 100000)))
 
-#calculate 95% confidence intervals for the odds ratios
-conf_int <- confint(model_foodtype, level = 0.95)
+model_summary <- summary(model_foodtype) 
 
-#add the confidence intervals to the summary
-foodtype_summary$ci_lower <- exp(conf_int[, 1])  # lower bound
-foodtype_summary$ci_upper <- exp(conf_int[, 2])  # upper bound
+##create summary table
+#extract the coefficients (estimates), standard errors, and z-values from the model summary
+estimates <- model_summary$coefficients[, 1]  
+std_errors <- model_summary$coefficients[, 2]  
+z_values <- model_summary$coefficients[, 3]  
+p_values <- model_summary$coefficients[, 4]
 
-# Format the table (optional)
-model_summary_table <- model_summary %>%
-  select(term, estimate, std.error, z.value, p.value, odds_ratio, ci_lower, ci_upper) %>%
-  arrange(term)
+#calculate the odds ratios by exponentiating the coefficients
+odds_ratios <- exp(estimates)
+
+#calculate percentage change in odds (Percentage change = (OR - 1) * 100)
+percentage_changes <- (odds_ratios - 1) * 100
+
+#calculate the 95% confidence intervals for the odds ratios (Wald CI)
+ci_lower <- exp(estimates - 1.96 * std_errors)
+ci_upper <- exp(estimates + 1.96 * std_errors)
+
+# Create a data frame to summarize the results
+summary_table <- data.frame(
+  Term = names(estimates),  
+  Estimate = estimates,      
+  Std_Error = std_errors,      
+  z_value = z_values,         
+  p_value = p_values,         
+  Odds_Ratio = odds_ratios,    
+  Percentage_Change = percentage_changes,  
+  CI_Lower = ci_lower,        
+  CI_Upper = ci_upper)
+
+row.names(summary_table) <- NULL
+
+#save
+write.csv(summary_table, "Output/foodtype_cache_summary.csv", row.names = FALSE)
+
+
+
+
+
+
 
 
 
