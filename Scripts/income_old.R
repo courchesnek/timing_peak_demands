@@ -289,6 +289,15 @@ row.names(summary_table) <- NULL
 #save
 write.csv(summary_table, "Output/foodtype_cache_summary.csv", row.names = FALSE)
 
+#generate predictions to plot
+
+
+
+
+
+
+
+
 
 
 
