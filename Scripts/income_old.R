@@ -136,6 +136,24 @@ type_proportions
 #save
 ggsave("Output/type_proportions.jpeg", plot = type_proportions, width = 10, height = 6)
 
+ggplot(feeding_proportions, aes(x = season, y = proportion_events, fill = sex)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", width = 0.7) +
+  facet_wrap(~food_type, scales = "fixed") +
+  ylim(0,1) + 
+  labs(
+    title = "Proportion of Capital and Income Feeding by Sex and Season",
+    x = "Season",
+    y = "Proportion of Feeding Events",
+    fill = "Sex") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    strip.text = element_text(size = 14, face = "bold"))
+
 # plot detailed food types ------------------------------------------------
 food_categories <- tibble(
   detail = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 27, 28, 29, 31, 32),
