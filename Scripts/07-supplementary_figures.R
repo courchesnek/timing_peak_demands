@@ -14,7 +14,10 @@ feeding <- feeding %>%
   dplyr::select(-locx_obs, -locy_obs, -snow, -locx_census, -locy_census)
 
 #how many ind squirrels?
-length(unique(feeding$squirrel_id))
+length(unique(feeding$squirrel_id)) #628 individual squirrels
+
+#how many data years?
+length(unique(feeding$year)) #12 years
 
 # define DEE values (kJ/day) --------------------------------------------------------------
 DEE_values <- data.frame(
@@ -78,25 +81,25 @@ feeding_proportions <- feeding %>%
   arrange(sex, season, food_type) %>%
   ungroup()
 
-
 # plot --------------------------------------------------------------------
 #reorder season levels
 feeding_proportions <- feeding_proportions %>%
   mutate(
     season = factor(season, levels = c("winter", "mating", "lactation", "non-breeding")),
-    food_type = factor(food_type, levels = c("income", "capital")))
+    food_type = factor(food_type, levels = c("capital", "income")))
 
-energetics <- ggplot(feeding_proportions, aes(x = season, y = proportion_DEE, fill = food_type)) +
-  geom_bar(stat = "identity", position = "stack", color = "black", width = 0.7) +
-  facet_wrap(~sex, labeller = labeller(sex = c("F" = "Female", "M" = "Male"))) +
+energetics <- ggplot(feeding_proportions, aes(x = season, y = proportion_DEE, fill = sex)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", width = 0.7) +
+  facet_wrap(~food_type, scales = "fixed",
+             labeller = labeller(food_type = c("capital" = "Capital", "income" = "Income"))) +
   labs(
-    title = "Proportion of Feeding Events by Sex and Season, Scaled to Daily Energy Expenditure Estimates",
+    title = "Energy Input from Capital vs. Income Food to Meet Daily Energy Requirements by Sex and Season",
     x = "Season",
     y = "Daily Energy Expenditure (kJ/day)",
-    fill = "Food Type") +
+    fill = "Sex") +
   scale_fill_manual(
-    values = c("income" = "#99FF66", "capital" = "#FF9933"),
-    labels = c("Income Feeding", "Capital Feeding")) +
+    values = c("F" = "#FF99CC", "M" = "#99CCFF"),
+    labels = c("Female", "Male")) +
   theme_minimal() +
   theme(
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
@@ -237,90 +240,3 @@ detailed_feeding
 
 #save
 ggsave("Output/feeding_sources.jpeg", plot = detailed_feeding, width = 10, height = 6)
-
-
-#Q1: Do food type preferences differ between sexes and across seasons, and does this difference explain cache size differences between males and females? -----------------------------------------------
-#ensure food_type is a factor in both datasets
-feeding <- feeding %>%
-  mutate(food_type = factor(food_type),
-         season = factor(season),
-         sex = factor(sex),
-         squirrel_id = factor(squirrel_id))
-
-midden_cones <- midden_cones %>%
-  mutate(squirrel_id = factor(squirrel_id))
-
-#relevel season to set non-breeding as the reference level
-feeding <- feeding %>%
-  mutate(season = relevel(factor(season), ref = "non-breeding"))
-
-#join cache sizes and feeding data
-feeding_cache <- left_join(feeding, midden_cones %>% 
-                dplyr::select(squirrel_id, year, log_cache_size_new, log_total_cones),
-                by = c("squirrel_id", "year")) %>%
-                na.omit()
-
-#fit a GLMM with food_type as the response and cache size as a predictor
-##does your cache size influence your reliance on a food_type (i.e. since females have lower cache sizes, do they rely more on income resources than males do?)
-#first, scale cache size to improve convergence
-feeding_cache$log_cache_size_scaled <- scale(feeding_cache$log_cache_size_new)
-
-model_foodtype <- glmer(food_type ~ log_cache_size_scaled + sex * season + log_total_cones + (1 | squirrel_id), 
-                          family = binomial(link = "logit"), 
-                          data = feeding_cache,
-                          control = glmerControl(optimizer = "bobyqa", 
-                          optCtrl = list(maxfun = 100000)))
-
-model_summary <- summary(model_foodtype) 
-
-##create summary table
-#extract the coefficients (estimates), standard errors, and z-values from the model summary
-estimates <- model_summary$coefficients[, 1]  
-std_errors <- model_summary$coefficients[, 2]  
-z_values <- model_summary$coefficients[, 3]  
-p_values <- model_summary$coefficients[, 4]
-
-#calculate the odds ratios by exponentiating the coefficients
-odds_ratios <- exp(estimates)
-
-#calculate percentage change in odds (Percentage change = (OR - 1) * 100)
-percentage_changes <- (odds_ratios - 1) * 100
-
-#calculate the 95% confidence intervals for the odds ratios (Wald CI)
-ci_lower <- exp(estimates - 1.96 * std_errors)
-ci_upper <- exp(estimates + 1.96 * std_errors)
-
-# Create a data frame to summarize the results
-summary_table <- data.frame(
-  Term = names(estimates),  
-  Estimate = estimates,      
-  Std_Error = std_errors,      
-  z_value = z_values,         
-  p_value = p_values,         
-  Odds_Ratio = odds_ratios,    
-  Percentage_Change = percentage_changes,  
-  CI_Lower = ci_lower,        
-  CI_Upper = ci_upper)
-
-row.names(summary_table) <- NULL
-
-#save
-write.csv(summary_table, "Output/foodtype_cache_summary.csv", row.names = FALSE)
-
-#generate predictions to plot
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

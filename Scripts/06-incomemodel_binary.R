@@ -63,7 +63,7 @@ feeding_cache <- left_join(feeding, midden_cones_adjusted %>%
 
 #summarise data ###########################################################
 
-# part 1: compare proportion feeding on capital  ------------------------------
+# make food type binary and address sample size issues  ------------------------------
 #create a binary response variable: capital = 1, income = 0
 feeding_cache_binomial <- feeding_cache %>%
   mutate(food_type_bin = ifelse(food_type == "capital", 1, 0))  #capital = 1, income = 0
@@ -100,7 +100,18 @@ feeding_cache_binomial_30 <- feeding_cache_binomial %>%
   ungroup() %>%
   filter(feeding_events >= 30) #want to minimize error to be reasonable while maintaining total sample size
 
-#fit a GLMM model to predict capital feeding vs income feeding based on cones cached and sex
+#remove unnecessary columns
+feeding_cache_binomial_30 <- feeding_cache_binomial_30 %>%
+  dplyr::select(-grid, -date, -repro_stage, -year_type, -cache_size_new_prev_year, -total_cones_prev_year,)
+
+#how many squirrels left?
+length(unique(feeding_cache_binomial_30$squirrel_id))
+
+#how many years of data?
+length(unique(feeding_cache_binomial_30$feeding_year))
+
+# model -------------------------------------------------------------------
+#fit a GLMM model to predict capital feeding based on cones cached and sex
 model <- glmer(food_type_bin ~ log_cache_size_new_prev_year * sex + log_total_cones_prev_year + sex * season + (1 | squirrel_id),
                family = binomial(link = "logit"),
                data = feeding_cache_binomial_30,
@@ -108,9 +119,9 @@ model <- glmer(food_type_bin ~ log_cache_size_new_prev_year * sex + log_total_co
                optCtrl = list(maxfun = 1000000)))  #increase maxfun (number of iterations) to fix convergence issues
 
 #model reference categories?
-contrasts(feeding_cache_binomial$food_type_bin) #capital is reference category
-contrasts(feeding_cache_binomial$sex) #female is reference category
-contrasts(feeding_cache_binomial$season) #non-breeding is reference category
+contrasts(feeding_cache_binomial_30$food_type_bin) #capital is reference category - the model is predicting the probability of capital feeding
+contrasts(feeding_cache_binomial_30$sex) #female is reference category
+contrasts(feeding_cache_binomial_30$season) #winter is reference category
 
 model_summary <- summary(model)
 
@@ -121,11 +132,11 @@ model_comparisons <- model_output %>%
   filter(term %in% c("log_cache_size_new_prev_year", 
                      "seasonlactation", 
                      "seasonmating", 
-                     "seasonwinter",
+                     "seasonnon-breeding",
                      "log_cache_size_new_prev_year:sexM",
                      "sexM:seasonlactation", 
                      "sexM:seasonmating", 
-                     "sexM:seasonwinter")) %>%
+                     "sexM:seasonnon-breeding")) %>%
   dplyr::select(-group, -effect)
 
 #calculate the estimates and standard errors for the comparisons
@@ -151,113 +162,46 @@ comparisons <- tibble(
   Comparison = c("log_cache_size_new_prev_year vs log_cache_size_new_prev_year:sexM", 
                  "seasonlactation vs sexM:seasonlactation", 
                  "seasonmating vs sexM:seasonmating", 
-                 "seasonwinter vs sexM:seasonwinter"),
+                 "seasonnon-breeding vs sexM:seasonnon-breeding"),
   Overlap = c(
     compare_intervals("log_cache_size_new_prev_year", "log_cache_size_new_prev_year:sexM"),
     compare_intervals("seasonlactation", "sexM:seasonlactation"),
     compare_intervals("seasonmating", "sexM:seasonmating"),
-    compare_intervals("seasonwinter", "sexM:seasonwinter")))
-
+    compare_intervals("seasonnon-breeding", "sexM:seasonnon-breeding")))
 
 # plots -------------------------------------------------------------------
+#generate predictions to plot
+predictions <- predict(model, type = "response")
 
+#add predictions to data set
+feeding_cache_binomial_30$predicted_probability_capital <- predictions
 
+probability_cap_feeding <- ggplot(feeding_cache_binomial_30, aes(x = log_cache_size_new_prev_year, 
+                            y = predicted_probability_capital, 
+                            color = sex)) +
+  geom_point(alpha = 0.6) +  
+  geom_smooth(method = "lm", aes(group = sex), 
+              se = TRUE, 
+              linetype = "solid", 
+              linewidth = 1) +
+  facet_wrap(~season, scales = "free_x", labeller = as_labeller(c("winter" = "Winter", "mating" = "Mating", "lactation" = "Lactation", "non-breeding" = "Non-Breeding"))) + 
+  scale_color_manual(values = c("F" = "#FF99CC", "M" = "#99CCFF"), labels = c("F" = "Female", "M" = "Male")) +
+  ylim(0,1) +
+  labs(title = "Predicted Probability of Capital Feeding",
+       x = "Log Number of New Cones Cached (Previous Year)",
+       y = "Predicted Probability of Capital Feeding",
+       color = "Sex") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1, face = "bold"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        legend.title = element_text(face = "bold", size = 12),
+        legend.text = element_text(face = "bold", size = 11),
+        strip.text = element_text(face = "bold", size = 11))
 
+probability_cap_feeding
 
-
-
-
-
-
-
-
-
-
-
-
-
-# part 2: compare feeding rates -------------------------------------------
-#calculate feeding rates
-feeding_rate <- feeding_cache_binomial_30 %>%
-  mutate(feeding_date = as.Date(date)) %>%
-  group_by(squirrel_id, feeding_year, sex, season, log_cache_size_new_prev_year, log_total_cones_prev_year, food_type) %>%
-  summarise(
-    #count the number of feeding events for the respective food type (capital or income)
-    feeding_events = n(),
-    #count the number of distinct feeding days for each food type
-    feeding_days = n_distinct(feeding_date)) %>%
-  ungroup() %>%
-  #calculate feeding rate as the number of events divided by the number of feeding days
-  mutate(
-    feeding_rate = ifelse(feeding_days == 0, 0, feeding_events / feeding_days))
-
-write.csv(feeding_rate, "Output/feeding_rate.csv", row.names = FALSE)
-
-observed_variance <- var(feeding_rate$feeding_rate)
-mean_feeding_rate <- mean(feeding_rate$feeding_rate)
-dispersion <- observed_variance / mean_feeding_rate
-# >1 indicates overdispersion - need to use negative binomial
-
-#fit a negative binomial for feeding rate
-model_feedingrate <- lmer(
-  feeding_rate ~ food_type * season * sex + log_cache_size_new_prev_year * sex 
-  + sex * season + log_total_cones_prev_year + (1 | squirrel_id),  #random effect for squirrel_id
-  data = feeding_rate,
-  control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 1000000)))
-
-summary(model_feedingrate)
-
-#model reference categories?
-contrasts(feeding_rate$food_type) #capital is reference category
-contrasts(feeding_rate$sex) #female is reference category
-contrasts(feeding_rate$season) #non-breeding is reference category
-
-#comparisons between groups - do CIs overlap?
-model_feedingrate_output <- tidy(model_feedingrate) %>%
-  dplyr::select(-group, -effect)
-
-model_comparison <- model_feedingrate_output %>%
-  mutate(
-    #for comparison of sex-specific effects with standard errors
-    lower = estimate - 1.96 * std.error,
-    upper = estimate + 1.96 * std.error)
-
-# Function to compare intervals
-compare_interval <- function(main_effect, interaction_effect, model_comparison) {
-  # Check if the terms exist in the model
-  if(!(main_effect %in% model_comparison$term) | !(interaction_effect %in% model_comparison$term)) {
-    return(NA)  # If either term doesn't exist, return NA
-  }
-  
-  main_lower <- filter(model_comparison, term == main_effect)$lower
-  main_upper <- filter(model_comparison, term == main_effect)$upper
-  interaction_lower <- filter(model_comparison, term == interaction_effect)$lower
-  interaction_upper <- filter(model_comparison, term == interaction_effect)$upper
-  
-  # Check if the intervals overlap
-  overlap <- !(interaction_upper < main_lower | interaction_lower > main_upper)
-  return(overlap)
-}
-
-# Create comparisons and check overlap
-comparison <- tibble(
-  Comparison = c("food_typeincome vs food_typeincome:sexM", 
-                 "food_typeincome:seasonlactation vs food_typeincome:seasonlactation:sexM", 
-                 "food_typeincome:seasonmating vs food_typeincome:seasonmating:sexM", 
-                 "food_typeincome:seasonwinter vs food_typeincome:seasonwinter:sexM"),
-  Overlap = c(
-    compare_intervals("food_typeincome", "food_typeincome:sexM", model_comparison),
-    compare_intervals("food_typeincome:seasonlactation", "food_typeincome:seasonlactation:sexM", model_comparison),
-    compare_intervals("food_typeincome:seasonmating", "food_typeincome:seasonmating:sexM", model_comparison),
-    compare_intervals("food_typeincome:seasonwinter", "food_typeincome:seasonwinter:sexM", model_comparison))
-)
-
-
-
-
-
-
-
+#save
+ggsave("Output/probability_capital_feeding.jpeg", plot = probability_cap_feeding, width = 12, height = 6)
 
 
 

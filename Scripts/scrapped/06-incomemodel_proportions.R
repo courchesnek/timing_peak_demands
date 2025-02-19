@@ -87,22 +87,22 @@ proportion_capital <- feeding_counts %>%
   mutate(proportion_capital = count_capital / total_count) %>%
   dplyr::select(-count_income)
 
+#how many individual squirrels?
+length(unique(proportion_capital$squirrel_id))
+
 # model -------------------------------------------------------------------
 #adjust proportions to avoid exact 0s and 1s
 proportion_capital$proportion_capital <- pmax(pmin(proportion_capital$proportion_capital, 1 - 1e-5), 1e-5)
 
 #beta regression for continuous response constrained between 0 and 1 (ideal for proportions)
-model <- glmmTMB(proportion_capital ~ log_cache_size_new_prev_year * sex + 
-                 log_total_cones_prev_year + sex * season + (1 | squirrel_id), 
-                 family = beta_family(link = "logit"),
-                 data = proportion_capital) 
+model <- glmmTMB(proportion_capital ~ log_cache_size_new_prev_year * sex + log_total_cones_prev_year + 
+                 sex * season + (1 | squirrel_id),
+                 data = proportion_capital,
+                 family = beta_family(link = "logit"))
 
 summary(model)
 
 #check residuals
-residuals_model <- simulateResiduals(model)
+residuals_model <- simulateResiduals(model) 
 plot(residuals_model)
-
-
-
 
