@@ -109,6 +109,19 @@ ggplot(feed_offmid, aes(x = repro_stage, y = distance_to_midden, color = sex)) +
   geom_boxplot() +
   facet_grid(~ year_type)
 
+#how many squirrels left?
+length(unique(feed_offmid$squirrel_id))
+
+feed_offmid %>%
+  group_by(sex) %>%
+  summarise(unique_squirrels = n_distinct(squirrel_id))
+
+#how many years of data?
+length(unique(feed_offmid$year))
+
+#how many grids?
+length(unique(feed_offmid$grid))
+
 # model -------------------------------------------------------------------
 #ensure year_type is a factor and set the correct order
 feed_offmid <- feed_offmid %>%

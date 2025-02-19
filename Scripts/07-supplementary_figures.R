@@ -191,9 +191,9 @@ feeding <- feeding %>%
       TRUE ~ "other"))
 
 feeding_summary <- feeding %>%
-  group_by(sex, season, year_type, detail) %>%
+  group_by(sex, season, detail) %>%
   summarise(total_events = n(), .groups = "drop") %>%
-  group_by(sex, season, year_type) %>%
+  group_by(sex, season) %>%
   mutate(proportion_events = total_events / sum(total_events)) %>%
   ungroup()
 
@@ -201,16 +201,14 @@ feeding_summary <- feeding %>%
 feeding_summary <- feeding_summary %>%
   mutate(
     season = factor(season, levels = c("winter", "mating", "lactation", "non-breeding")),
-    year_type = factor(year_type, levels = c("mast", "post-mast", "non-mast")),
     detail = factor(detail, levels = c("new cone", "new mushroom", "old cone", "old mushroom", "spruce buds", "other")))
 
 detailed_feeding <- ggplot(feeding_summary, aes(x = season, y = proportion_events, fill = detail)) +
   geom_bar(stat = "identity", position = "stack", width = 0.8, color = "black") +
-  facet_grid(sex ~ year_type, labeller = labeller(
-    sex = c("F" = "Female", "M" = "Male"),
-    year_type = c("mast" = "Mast", "post-mast" = "Post-Mast", "non-mast" = "Non-Mast"))) +
+  facet_grid(~sex, labeller = labeller(
+    sex = c("F" = "Female", "M" = "Male"))) +
   labs(
-    title = "Proportion of Feeding Events by Food Type, Season, Sex, and Year Type",
+    title = "Proportion of Feeding Events by Food Type, Season, Sex",
     x = "Season",
     y = "Proportion of Feeding Events",
     fill = "Food Type") +
@@ -223,8 +221,8 @@ detailed_feeding <- ggplot(feeding_summary, aes(x = season, y = proportion_event
       "witch's broom" = "#D55E00",
       "new mushroom" = "#CC79A7",
       "other" = "#999999"),
-    breaks = c("old cone", "old mushroom", "new cone", "new mushroom", "spruce buds", "witch's broom", "other"),
-    labels = c("Capital: Old Cone", "Capital: Old Mushroom", "Income: New Cone", "Income: New Mushroom", "Income: Spruce Buds", "Income: Witch's Broom", "Income: Other")) +
+    breaks = c("old cone", "old mushroom", "new cone", "new mushroom", "spruce buds", "other"),
+    labels = c("Capital: Old Cone", "Capital: Old Mushroom", "Income: New Cone", "Income: New Mushroom", "Income: Spruce Buds", "Income: Other")) +
   theme_minimal() +
   theme(
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5),

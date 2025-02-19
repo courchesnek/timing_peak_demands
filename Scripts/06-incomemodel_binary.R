@@ -61,7 +61,6 @@ feeding_cache <- left_join(feeding, midden_cones_adjusted %>%
                  by = c("squirrel_id", "feeding_year" = "following_year")) %>%
                  na.omit()
 
-#summarise data ###########################################################
 
 # make food type binary and address sample size issues  ------------------------------
 #create a binary response variable: capital = 1, income = 0
@@ -102,17 +101,69 @@ feeding_cache_binomial_30 <- feeding_cache_binomial %>%
 
 #remove unnecessary columns
 feeding_cache_binomial_30 <- feeding_cache_binomial_30 %>%
-  dplyr::select(-grid, -date, -repro_stage, -year_type, -cache_size_new_prev_year, -total_cones_prev_year,)
+  dplyr::select(-grid, -date, -repro_stage, -cache_size_new_prev_year, -total_cones_prev_year,)
+
+#summarise data ---------------------------------
+feeding_summary <- feeding_cache_binomial_30 %>%
+  group_by(sex, season, food_type) %>%
+  summarise(
+    total_observations = n(),
+    .groups = "drop") %>%
+  pivot_wider(
+    names_from = food_type, 
+    values_from = total_observations,
+    values_fill = list(total_observations = 0))
+
+#save
+write.csv(feeding_summary, "Output/capvsinc_summary.csv", row.names = FALSE)
 
 #how many squirrels left?
 length(unique(feeding_cache_binomial_30$squirrel_id))
 
+feeding_cache_binomial_30 %>%
+  group_by(sex) %>%
+  summarise(unique_squirrels = n_distinct(squirrel_id))
+
 #how many years of data?
 length(unique(feeding_cache_binomial_30$feeding_year))
 
-# model -------------------------------------------------------------------
-#fit a GLMM model to predict capital feeding based on cones cached and sex
+# comparing models -------------------------------------------------------
+#only log total cones
 model <- glmer(food_type_bin ~ log_cache_size_new_prev_year * sex + log_total_cones_prev_year + sex * season + (1 | squirrel_id),
+               family = binomial(link = "logit"),
+               data = feeding_cache_binomial_30,
+               control = glmerControl(optimizer = "bobyqa", 
+               optCtrl = list(maxfun = 1000000)))  #increase maxfun (number of iterations) to fix convergence issues
+
+#replace log total cones with year type
+model_1 <- glmer(food_type_bin ~ log_cache_size_new_prev_year * sex + sex * season + year_type + (1 | squirrel_id),
+                 family = binomial(link = "logit"),
+                 data = feeding_cache_binomial_30,
+                 control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 1000000)))
+
+#include both log total cones and year type - best model but not enough data to add year type....
+model_2 <- glmer(food_type_bin ~ log_cache_size_new_prev_year * sex + log_total_cones_prev_year +
+                   year_type + sex * season + (1 | squirrel_id),
+                 family = binomial(link = "logit"),
+                 data = feeding_cache_binomial_30,
+                 control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 1000000)))
+
+#keep log total cones and include feeding year as a random effect
+model_3 <- glmer(food_type_bin ~ log_cache_size_new_prev_year * sex + log_total_cones_prev_year +
+                   sex * season + (1 | squirrel_id) + (1 | feeding_year),
+                 family = binomial(link = "logit"),
+                 data = feeding_cache_binomial_30,
+                 control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 1000000)))
+
+AIC(model, model_1, model_2, model_3)
+anova(model, model_1, model_2, model_3, test="Chisq")
+
+# model -------------------------------------------------------------------
+##re-level season so winter is the reference category
+feeding_cache_binomial_30$season <- relevel(feeding_cache_binomial_30$season, ref = "winter")
+
+#fit a GLMM model to predict capital feeding based on cones cached and sex
+final_model <- glmer(food_type_bin ~ log_cache_size_new_prev_year * sex + sex * season + log_total_cones_prev_year + (1 | squirrel_id) + (1 | feeding_year),
                family = binomial(link = "logit"),
                data = feeding_cache_binomial_30,
                control = glmerControl(optimizer = "bobyqa", 
@@ -123,10 +174,10 @@ contrasts(feeding_cache_binomial_30$food_type_bin) #capital is reference categor
 contrasts(feeding_cache_binomial_30$sex) #female is reference category
 contrasts(feeding_cache_binomial_30$season) #winter is reference category
 
-model_summary <- summary(model)
+model_summary <- summary(final_model)
 
 #extract the model output into a tidy format
-model_output <- tidy(model)
+model_output <- tidy(final_model)
 
 model_comparisons <- model_output %>%
   filter(term %in% c("log_cache_size_new_prev_year", 
@@ -169,39 +220,159 @@ comparisons <- tibble(
     compare_intervals("seasonmating", "sexM:seasonmating"),
     compare_intervals("seasonnon-breeding", "sexM:seasonnon-breeding")))
 
+#clean up model output to save as csv
+model_output <- model_output %>%
+  dplyr::select(-effect, -group)
+
+model_output <- model_output[-12, ]
+model_output <- model_output[-12, ]
+
+model_output <- model_output %>%
+  rename(zvalue = statistic)
+  
+#save
+write.csv(model_output, "Output/income_model_output.csv", row.names = FALSE)
+
 # plots -------------------------------------------------------------------
 #generate predictions to plot
-predictions <- predict(model, type = "response")
+# predictions <- predict(final_model, type = "response")
+# 
+# #add predictions to data set
+# feeding_cache_binomial_30$predicted_probability_capital <- predictions
+# 
+# probability_cap_feeding <- ggplot(feeding_cache_binomial_30, aes(x = log_cache_size_new_prev_year, 
+#                             y = predicted_probability_capital, 
+#                             color = sex)) +
+#   geom_point(alpha = 0.6) +  
+#   geom_smooth(method = "lm", aes(group = sex), 
+#               se = TRUE, 
+#               linetype = "solid", 
+#               linewidth = 1) +
+#   facet_wrap(~season, scales = "free_x", labeller = as_labeller(c("winter" = "Winter", "mating" = "Mating", "lactation" = "Lactation", "non-breeding" = "Non-Breeding"))) + 
+#   scale_color_manual(values = c("F" = "#FF99CC", "M" = "#99CCFF"), labels = c("F" = "Female", "M" = "Male")) +
+#   ylim(0,1) +
+#   labs(title = "Predicted Probability of Capital Feeding",
+#        x = "Log Number of New Cones Cached (Previous Year)",
+#        y = "Predicted Probability of Capital Feeding",
+#        color = "Sex") +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 0, hjust = 1, face = "bold"),
+#         plot.title = element_text(hjust = 0.5, face = "bold"),
+#         legend.title = element_text(face = "bold", size = 12),
+#         legend.text = element_text(face = "bold", size = 11),
+#         strip.text = element_text(face = "bold", size = 11))
+# 
+# probability_cap_feeding
+# 
+# #save
+# ggsave("Output/probability_capital_feeding.jpeg", plot = probability_cap_feeding, width = 12, height = 6)
 
-#add predictions to data set
-feeding_cache_binomial_30$predicted_probability_capital <- predictions
+#generate predictions to plot
+emm <- emmeans(final_model, ~ sex * season * log_cache_size_new_prev_year,
+               at = list(log_cache_size_new_prev_year = seq(min(feeding_cache_binomial_30$log_cache_size_new_prev_year),
+                                                            max(feeding_cache_binomial_30$log_cache_size_new_prev_year),
+                                                            length = 100)),
+               type = "response")
 
-probability_cap_feeding <- ggplot(feeding_cache_binomial_30, aes(x = log_cache_size_new_prev_year, 
-                            y = predicted_probability_capital, 
-                            color = sex)) +
-  geom_point(alpha = 0.6) +  
-  geom_smooth(method = "lm", aes(group = sex), 
-              se = TRUE, 
-              linetype = "solid", 
-              linewidth = 1) +
-  facet_wrap(~season, scales = "free_x", labeller = as_labeller(c("winter" = "Winter", "mating" = "Mating", "lactation" = "Lactation", "non-breeding" = "Non-Breeding"))) + 
-  scale_color_manual(values = c("F" = "#FF99CC", "M" = "#99CCFF"), labels = c("F" = "Female", "M" = "Male")) +
-  ylim(0,1) +
-  labs(title = "Predicted Probability of Capital Feeding",
-       x = "Log Number of New Cones Cached (Previous Year)",
-       y = "Predicted Probability of Capital Feeding",
-       color = "Sex") +
+emm_df <- as.data.frame(emm)
+
+#change labels
+pred_data <- emm_df %>%
+  rename(
+    predicted_probability = prob,
+    conf.low = asymp.LCL,
+    conf.high = asymp.UCL)
+
+pred_data <- pred_data %>%
+  mutate(
+    sex = factor(sex, levels = c("F", "M"), labels = c("Females", "Males")),
+    season = factor(season, levels = c("winter", "mating", "lactation", "non-breeding"),
+                    labels = c("Winter", "Mating", "Lactation", "Non-breeding")))
+
+
+season_colours <- c("Winter"       = "#6699CC",
+                    "Mating"       = "#663300",
+                    "Lactation"    = "#66CC66",
+                    "Non-breeding" = "#CC0000")
+
+ggplot(pred_data, aes(x = log_cache_size_new_prev_year, y = predicted_probability, color = season, fill = season)) +
+  geom_ribbon(
+    aes(ymin = conf.low, ymax = conf.high, fill = season, group = season),
+    alpha = 0.1, color = NA) +
+  geom_line(aes(group = season), size = 1) +
+  facet_wrap(~ sex) +
+  scale_color_manual(
+    name = "Season",
+    values = season_colours,
+    breaks = c("Winter", "Mating", "Lactation", "Non-breeding")) +
+  scale_fill_manual(
+    name = "Season",
+    values = season_colours,
+    breaks = c("Winter", "Mating", "Lactation", "Non-breeding")) +
+  labs(
+    title = "Predicted probability of capital feeding by sex and season",
+    x = "Number of new cones cached in the previous year (log-scaled)",
+    y = "Probability of capital feeding") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 0, hjust = 1, face = "bold"),
-        plot.title = element_text(hjust = 0.5, face = "bold"),
-        legend.title = element_text(face = "bold", size = 12),
-        legend.text = element_text(face = "bold", size = 11),
-        strip.text = element_text(face = "bold", size = 11))
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(face = "bold"))
 
-probability_cap_feeding
 
-#save
-ggsave("Output/probability_capital_feeding.jpeg", plot = probability_cap_feeding, width = 12, height = 6)
+# variability in cache across year types? --------------------------------
+#add year type column to cache data
+##define mast years
+mast_years <- c(1993, 1998, 2005, 2010, 2014, 2019, 2022)
+
+#add a column for year_type
+midden_cones <- midden_cones %>%
+  mutate(
+    year_type = case_when(
+      year %in% mast_years ~ "mast",
+      year %in% (mast_years + 1) ~ "post-mast",
+      TRUE ~ "non-mast"))
+
+#step 1: aggregate the data by sex and year_type
+agg_data <- midden_cones %>%
+  group_by(sex, year_type) %>%
+  summarize(mean_cache = mean(cache_size_new, na.rm = TRUE)) %>%
+  ungroup()
+
+#step 2: calculate the observed variance in mean cache sizes for each sex
+female_means <- agg_data$mean_cache[agg_data$sex == "F"]
+male_means   <- agg_data$mean_cache[agg_data$sex == "M"]
+
+obs_var_female <- var(female_means)
+obs_var_male   <- var(male_means)
+
+#compute the ratio of variances (female/male)
+obs_ratio <- obs_var_female / obs_var_male
+cat("Observed variance ratio (female/male):", obs_ratio, "\n")
+
+#step 3: permutation test to assess significance
+##because data is non-normally distributed and sample size is small (i.e. only 3 groupings for each sex), a permutation test is a robust, non-parametric option
+set.seed(123)  #for reproducibility
+n_perm <- 10000
+perm_ratios <- numeric(n_perm)
+
+combined_means <- agg_data$mean_cache
+original_labels <- agg_data$sex
+
+for (i in 1:n_perm) {
+  perm_labels <- sample(original_labels)
+  perm_female_var <- var(combined_means[perm_labels == "F"])
+  perm_male_var   <- var(combined_means[perm_labels == "M"])
+  perm_ratios[i] <- perm_female_var / perm_male_var
+}
+
+# For a one-tailed test (females are hypothesized to be more variable),
+# calculate the p-value as the proportion of permuted ratios that are as high or higher than observed.
+p_value <- mean(perm_ratios >= obs_ratio)
+cat("Permutation test p-value:", p_value, "\n")
+## p-value >0.05 = no true difference in the variabilty of cached cones between females and males across year types.
+
+
 
 
 
