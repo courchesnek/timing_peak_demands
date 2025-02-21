@@ -49,7 +49,7 @@ feeding_proportions_plot <- ggplot(feeding_proportions,
 feeding_proportions_plot
 
 #save
-ggsave("Output/feeding_proportions.jpeg", plot = feeding_proportions_plot, width = 8, height = 6)
+ggsave("Output/feeding_proportions.jpeg", plot = feeding_proportions_plot, width = 12, height = 6)
 
 #off-midden feeding events only for analysis, since on-midden events overwhelm the data --------
 feed_offmid <- feeding_within_territory %>%
@@ -88,8 +88,7 @@ summary_stats <- feeding_within_territory %>%
   group_by(sex, snow, repro_stage, year_type) %>%
   mutate(
     location = case_when(
-      within_midden ~ "on_midden",
-      within_territory ~ "off_midden")) %>%
+      within_midden ~ "on_midden")) %>%
   summarize(
     mean_distance = mean(distance_to_midden, na.rm = TRUE),
     median_distance = median(distance_to_midden, na.rm = TRUE),
@@ -125,12 +124,21 @@ length(unique(feed_offmid$grid))
 # model -------------------------------------------------------------------
 #ensure year_type is a factor and set the correct order
 feed_offmid <- feed_offmid %>%
-  mutate(year_type = factor(year_type, levels = c("mast", "post-mast", "non-mast")))
+  mutate(year_type = factor(year_type, levels = c("non-mast", "mast", "post-mast")),
+         sex = factor(sex),
+         repro_stage = factor(repro_stage, levels = c("non-breeding", "mating", "lactation")),
+         snow = factor(snow))
 
 model <- lmer(log_distance ~ sex * repro_stage + year_type + snow + (1 | squirrel_id), 
               data = feed_offmid, REML = FALSE)
 
 model_summary <- summary(model)
+
+#model reference categories?
+contrasts(feed_offmid$year_type) #non-mast year is reference category
+contrasts(feed_offmid$sex) #female is reference category
+contrasts(feed_offmid$repro_stage) #non-breeding is reference category
+contrasts(feed_offmid$snow) #no snow is reference category
 
 #save csv
 fixed_effects <- as.data.frame(model_summary$coefficients)
@@ -156,11 +164,80 @@ results <- round(results, 3)
 results$Lower_CI <- results$Estimate - 1.96 * results$`Std. Error`
 results$Upper_CI <- results$Estimate + 1.96 * results$`Std. Error`
 
-#add predictor names for clarity
-results$Predictor <- rownames(results)
+results <- results %>% 
+  tibble::rownames_to_column("term")
 
 #print the table
 print(results)
+
+# compare model terms -----------------------------------------------------
+model_comparisons <- results %>%
+  filter(term %in% c("(Intercept)", 
+                     "sexM", 
+                     "repro_stagemating", 
+                     "repro_stagelactation", 
+                     "sexM:repro_stagemating", 
+                     "sexM:repro_stagelactation"))
+
+#for baseline:
+female_baseline <- model_comparisons %>% filter(term == "(Intercept)")
+male_baseline <- model_comparisons %>% filter(term == "sexM")
+#male baseline = female baseline + sexM
+male_baseline_est <- female_baseline$Estimate + male_baseline$Estimate
+male_baseline_lower <- female_baseline$Lower_CI + male_baseline$Lower_CI
+male_baseline_upper <- female_baseline$Upper_CI + male_baseline$Upper_CI
+
+#for mating:
+female_mating <- model_comparisons %>% filter(term == "repro_stagemating")
+male_mating_int <- model_comparisons %>% filter(term == "sexM:repro_stagemating")
+male_mating_est <- female_mating$Estimate + male_mating_int$Estimate
+male_mating_lower <- female_mating$Lower_CI + male_mating_int$Lower_CI
+male_mating_upper <- female_mating$Upper_CI + male_mating_int$Upper_CI
+
+#for lactation:
+female_lactation <- model_comparisons %>% filter(term == "repro_stagelactation")
+male_lactation_int <- model_comparisons %>% filter(term == "sexM:repro_stagelactation")
+male_lactation_est <- female_lactation$Estimate + male_lactation_int$Estimate
+male_lactation_lower <- female_lactation$Lower_CI + male_lactation_int$Lower_CI
+male_lactation_upper <- female_lactation$Upper_CI + male_lactation_int$Upper_CI
+
+#create a summary tibble comparing female vs. male effects
+comparisons <- tibble(
+  Comparison = c("Baseline: Female vs. Male",
+                 "Mating: Female vs. Male",
+                 "Lactation: Female vs. Male"),
+  Female_Estimate = c(female_baseline$Estimate,
+                      female_mating$Estimate,
+                      female_lactation$Estimate),
+  Female_Lower_CI = c(female_baseline$Lower_CI,
+                      female_mating$Lower_CI,
+                      female_lactation$Lower_CI),
+  Female_Upper_CI = c(female_baseline$Upper_CI,
+                      female_mating$Upper_CI,
+                      female_lactation$Upper_CI),
+  Male_Estimate = c(male_baseline_est,
+                    male_mating_est,
+                    male_lactation_est),
+  Male_Lower_CI = c(male_baseline_lower,
+                    male_mating_lower,
+                    male_lactation_lower),
+  Male_Upper_CI = c(male_baseline_upper,
+                    male_mating_upper,
+                    male_lactation_upper))
+
+#check for overlap between the female and male 95% CIs
+comparisons <- comparisons %>%
+  mutate(
+    Overlap = if_else((Male_Upper_CI < Female_Lower_CI) | (Male_Lower_CI > Female_Upper_CI),
+                      FALSE, TRUE))
+
+print(comparisons)
+
+
+
+
+
+
 
 # plot ---------------------------------------------------------------------
 predictions <- ggpredict(model, terms = c("sex [F, M]", "repro_stage [mating, lactation, non-breeding]"))
@@ -212,64 +289,106 @@ ggsave("Output/feeding_distances_meters.jpeg", plot = feeding_distances_meters, 
 #read in cone data
 midden_cones <- read.csv("Input/midden_cones.csv")
 
+#need to join with feeding obs but based on lag (cones cached in one year compared to feeding distances the next year)
+midden_cones_adjusted <- midden_cones %>%
+  dplyr::rename(
+    cache_size_new_prev_year = cache_size_new,
+    total_cones_prev_year = total_cones,
+    log_cache_size_new_prev_year = log_cache_size_new,
+    log_total_cones_prev_year = log_total_cones) %>%
+  mutate(year = as.numeric(year),
+         following_year = year + 1)
+
 #filter for only positive caching events
-positive_caches <- midden_cones %>%
-  filter(log_cache_size_new > 0)
+positive_caches <- midden_cones_adjusted %>%
+  filter(log_cache_size_new_prev_year > 0)
 
 #join feeding obs and cones
-feeding_cones <- feed_offmid %>%
-  inner_join(positive_caches, by = c("squirrel_id", "sex", "grid", "year"), relationship = "many-to-many")
+feeding_cones <- left_join(feed_offmid, positive_caches %>%
+                 dplyr::select(squirrel_id, following_year, 
+                               cache_size_new_prev_year, total_cones_prev_year, 
+                               log_cache_size_new_prev_year, log_total_cones_prev_year),
+                               by = c("squirrel_id", "year" = "following_year")) %>%
+                 na.omit()
 
 #fit a linear mixed-effects model
-feeding_cones_model <- lmer(
-  log_distance ~ log_cache_size_new + log_total_cones + (1 | squirrel_id),
+# feeding_cones_model <- lmer(
+#   log_distance ~ sex + log_cache_size_new_prev_year + log_total_cones_prev_year + (1 | squirrel_id),
+#   data = feeding_cones,
+#   REML = FALSE)
+
+feeding_cones_model2 <- lmer(
+  log_distance ~ sex * log_cache_size_new_prev_year + log_total_cones_prev_year + repro_stage + snow + (1 | squirrel_id),
   data = feeding_cones,
   REML = FALSE)
+
+#AIC(feeding_cones_model, feeding_cones_model2) #second model is better
 
 #model summary
-summary(feeding_cones_model)
+summary(feeding_cones_model2)
 
-#transform the log variables back to their original scale
-feeding_cones_transformed <- feeding_cones %>%
+#calculate the average log_total_cones_prev_year for each year type
+feeding_cones <- feeding_cones %>%
+  mutate(cache_year = year - 1)
+
+feeding_cones <- feeding_cones %>%
+  mutate(cache_year_type = case_when(
+    cache_year %in% c(2010, 2014, 2019, 2022) ~ "mast",
+    cache_year %in% c(2011, 2015, 2020, 2023) ~ "post-mast",
+    TRUE ~ "non-mast"))
+
+average_cones <- feeding_cones %>%
+  group_by(cache_year_type) %>%
+  summarize(avg_log_total = mean(log_total_cones_prev_year, na.rm = TRUE))
+
+#create a prediction grid for log_cache_size_new_prev_year, with sex and cache_year_type as grouping factors.
+cache_seq <- seq(
+  from = min(feeding_cones$log_cache_size_new_prev_year, na.rm = TRUE),
+  to   = max(feeding_cones$log_cache_size_new_prev_year, na.rm = TRUE),
+  length.out = 100)
+
+pred_grid <- expand.grid(
+  sex = c("F", "M"),
+  cache_year_type = unique(feeding_cones$cache_year_type),
+  log_cache_size_new_prev_year = cache_seq)
+
+#join the average log_total_cones value for each cache_year_type.
+pred_grid <- left_join(pred_grid, average_cones, by = "cache_year_type")
+
+#set typical values for the other predictors.
+pred_grid <- pred_grid %>%
   mutate(
-    distance_meters = exp(log_distance), 
-    cache_size_new = exp(log_cache_size_new),  
-    total_cones = exp(log_total_cones))
+    repro_stage = "non-breeding",         
+    snow = "no snow",           
+    squirrel_id = NA,                   # population-level predictions
+    log_total_cones_prev_year = avg_log_total)
 
-#plot feeding distance in meters vs. cache size (new cones)
-ggplot(feeding_cones_transformed, aes(x = cache_size_new, y = distance_meters, color = sex)) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(method = "lm", se = TRUE) +
+#predict on the log scale using your interaction model.
+pred_grid$pred_log_distance <- predict(
+  feeding_cones_model2,
+  newdata = pred_grid,
+  re.form = NA)   #exclude random effects for population-level predictions
+
+#back-transform predictions and the cache predictor to actual values.
+pred_grid <- pred_grid %>%
+  mutate(
+    pred_distance = exp(pred_log_distance),
+    cache_size = exp(log_cache_size_new_prev_year))
+
+#plot the results, faceting by the cache_year_type.
+ggplot(pred_grid, aes(x = cache_size, y = pred_distance, color = sex)) +
+  geom_line(size = 1) +
+  facet_wrap(~ cache_year_type) +
+  scale_x_log10(
+    breaks = c(1, 10, 100, 1000, 10000, 100000),
+    labels = c("1", "10", "100", "1K", "10K", "100K")) +   # helpful if cache sizes span multiple orders of magnitude
   labs(
-    title = "Relationship Between Feeding Distance (m) and Number of New Cones Cached by Sex",
-    x = "New Cones Cached",
-    y = "Feeding Distance (m)",
-    color = "Sex") +
-  scale_color_manual(values = c("F" = "#FF66FF", "M" = "#0066FF"), labels = c("Female", "Male")) +
-  facet_wrap(~sex, scales = "free_x") +  # Separate by sex
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-    axis.title = element_text(size = 14),
-    axis.text = element_text(size = 12),
-    legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12),
-    strip.text = element_text(size = 14, face = "bold"))
-
-#let's extend the model by adding other variables
-global_model <- lmer(
-  log_distance ~ log_cache_size_new * sex + repro_stage + year_type + snow +
-    (1 | squirrel_id),
-  data = feeding_cones,
-  REML = FALSE)
-
-
-
-
-
-
-
-
+    x = "Number of new cones cached",
+    y = "Predicted Feeding Distance (m)",
+    color = "Sex",
+    title = "Predicted Feeding Distance vs. Cones Cached by Year Type"
+  ) +
+  theme_minimal()
 
 
 
