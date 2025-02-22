@@ -171,73 +171,56 @@ results <- results %>%
 print(results)
 
 # compare model terms -----------------------------------------------------
-model_comparisons <- results %>%
+model_output <- tidy(model)
+
+model_comparisons <- model_output %>%
   filter(term %in% c("(Intercept)", 
                      "sexM", 
                      "repro_stagemating", 
                      "repro_stagelactation", 
                      "sexM:repro_stagemating", 
-                     "sexM:repro_stagelactation"))
+                     "sexM:repro_stagelactation")) %>%
+  dplyr::select(-group, -effect)
 
-#for baseline:
-female_baseline <- model_comparisons %>% filter(term == "(Intercept)")
-male_baseline <- model_comparisons %>% filter(term == "sexM")
-#male baseline = female baseline + sexM
-male_baseline_est <- female_baseline$Estimate + male_baseline$Estimate
-male_baseline_lower <- female_baseline$Lower_CI + male_baseline$Lower_CI
-male_baseline_upper <- female_baseline$Upper_CI + male_baseline$Upper_CI
-
-#for mating:
-female_mating <- model_comparisons %>% filter(term == "repro_stagemating")
-male_mating_int <- model_comparisons %>% filter(term == "sexM:repro_stagemating")
-male_mating_est <- female_mating$Estimate + male_mating_int$Estimate
-male_mating_lower <- female_mating$Lower_CI + male_mating_int$Lower_CI
-male_mating_upper <- female_mating$Upper_CI + male_mating_int$Upper_CI
-
-#for lactation:
-female_lactation <- model_comparisons %>% filter(term == "repro_stagelactation")
-male_lactation_int <- model_comparisons %>% filter(term == "sexM:repro_stagelactation")
-male_lactation_est <- female_lactation$Estimate + male_lactation_int$Estimate
-male_lactation_lower <- female_lactation$Lower_CI + male_lactation_int$Lower_CI
-male_lactation_upper <- female_lactation$Upper_CI + male_lactation_int$Upper_CI
-
-#create a summary tibble comparing female vs. male effects
-comparisons <- tibble(
-  Comparison = c("Baseline: Female vs. Male",
-                 "Mating: Female vs. Male",
-                 "Lactation: Female vs. Male"),
-  Female_Estimate = c(female_baseline$Estimate,
-                      female_mating$Estimate,
-                      female_lactation$Estimate),
-  Female_Lower_CI = c(female_baseline$Lower_CI,
-                      female_mating$Lower_CI,
-                      female_lactation$Lower_CI),
-  Female_Upper_CI = c(female_baseline$Upper_CI,
-                      female_mating$Upper_CI,
-                      female_lactation$Upper_CI),
-  Male_Estimate = c(male_baseline_est,
-                    male_mating_est,
-                    male_lactation_est),
-  Male_Lower_CI = c(male_baseline_lower,
-                    male_mating_lower,
-                    male_lactation_lower),
-  Male_Upper_CI = c(male_baseline_upper,
-                    male_mating_upper,
-                    male_lactation_upper))
-
-#check for overlap between the female and male 95% CIs
-comparisons <- comparisons %>%
+#calculate the estimates and standard errors for the comparisons
+model_comparisons <- model_comparisons %>%
   mutate(
-    Overlap = if_else((Male_Upper_CI < Female_Lower_CI) | (Male_Lower_CI > Female_Upper_CI),
-                      FALSE, TRUE))
+    #for comparison of sex-specific effects with standard errors
+    lower = estimate - 1.96 * std.error,
+    upper = estimate + 1.96 * std.error)
 
-print(comparisons)
+#create a function to calculate if the confidence intervals overlap
+compare_intervals <- function(main_effect, interaction_effect) {
+  main_lower <- filter(model_comparisons, term == main_effect)$lower
+  main_upper <- filter(model_comparisons, term == main_effect)$upper
+  interaction_lower <- filter(model_comparisons, term == interaction_effect)$lower
+  interaction_upper <- filter(model_comparisons, term == interaction_effect)$upper
+  
+  #check if the intervals overlap
+  overlap <- !(interaction_upper < main_lower | interaction_lower > main_upper)
+  return(overlap)
+}
 
+comparisons <- tibble(
+  Comparison = c("(Intercept) vs sexM",
+                 "repro_stagemating vs sexM:repro_stagemating", 
+                 "repro_stagelactation vs sexM:repro_stagelactation"),
+  Overlap = c(
+    compare_intervals("(Intercept)", "sexM"),
+    compare_intervals("repro_stagemating", "sexM:repro_stagemating"),
+    compare_intervals("repro_stagelactation", "sexM:repro_stagelactation")))
 
+#clean up model output to save as csv
+model_output <- model_output %>%
+  dplyr::select(-effect, -group)
 
+model_output <- model_output[-11, ]
 
+model_output <- model_output %>%
+  rename(zvalue = statistic)
 
-
+#save
+write.csv(model_output, "Output/income_model_output.csv", row.names = FALSE)
 
 # plot ---------------------------------------------------------------------
 predictions <- ggpredict(model, terms = c("sex [F, M]", "repro_stage [mating, lactation, non-breeding]"))
@@ -305,94 +288,64 @@ positive_caches <- midden_cones_adjusted %>%
 
 #join feeding obs and cones
 feeding_cones <- left_join(feed_offmid, positive_caches %>%
-                 dplyr::select(squirrel_id, following_year, 
-                               cache_size_new_prev_year, total_cones_prev_year, 
-                               log_cache_size_new_prev_year, log_total_cones_prev_year),
+                 dplyr::select(squirrel_id, following_year,
+                               log_cache_size_new_prev_year),
                                by = c("squirrel_id", "year" = "following_year")) %>%
                  na.omit()
 
+##model ----------------------------------------------------------
 #fit a linear mixed-effects model
-# feeding_cones_model <- lmer(
-#   log_distance ~ sex + log_cache_size_new_prev_year + log_total_cones_prev_year + (1 | squirrel_id),
-#   data = feeding_cones,
-#   REML = FALSE)
-
-feeding_cones_model2 <- lmer(
-  log_distance ~ sex * log_cache_size_new_prev_year + log_total_cones_prev_year + repro_stage + snow + (1 | squirrel_id),
+feeding_cones_model <- lmer(
+  log_distance ~ sex * log_cache_size_new_prev_year + sex * repro_stage + year_type + snow + (1 | squirrel_id),
   data = feeding_cones,
   REML = FALSE)
 
-#AIC(feeding_cones_model, feeding_cones_model2) #second model is better
-
 #model summary
-summary(feeding_cones_model2)
+feeding_cones_model_summary <- summary(feeding_cones_model)
 
-#calculate the average log_total_cones_prev_year for each year type
-feeding_cones <- feeding_cones %>%
-  mutate(cache_year = year - 1)
+#model reference categories?
+contrasts(feeding_cones$year_type) #non-mast year is reference category
+contrasts(feeding_cones$sex) #female is reference category
+contrasts(feeding_cones$repro_stage) #non-breeding is reference category
+contrasts(feeding_cones$snow) #no snow is reference category
 
-feeding_cones <- feeding_cones %>%
-  mutate(cache_year_type = case_when(
-    cache_year %in% c(2010, 2014, 2019, 2022) ~ "mast",
-    cache_year %in% c(2011, 2015, 2020, 2023) ~ "post-mast",
-    TRUE ~ "non-mast"))
+model_output_feeding_cones <- tidy(feeding_cones_model)
 
-average_cones <- feeding_cones %>%
-  group_by(cache_year_type) %>%
-  summarize(avg_log_total = mean(log_total_cones_prev_year, na.rm = TRUE))
+model_comparisons_feeding_cones <- model_output_feeding_cones %>%
+  filter(term %in% c("log_cache_size_new_prev_year", 
+                     "sexM:log_cache_size_new_prev_year")) %>%
+  dplyr::select(-group, -effect)
 
-#create a prediction grid for log_cache_size_new_prev_year, with sex and cache_year_type as grouping factors.
-cache_seq <- seq(
-  from = min(feeding_cones$log_cache_size_new_prev_year, na.rm = TRUE),
-  to   = max(feeding_cones$log_cache_size_new_prev_year, na.rm = TRUE),
-  length.out = 100)
-
-pred_grid <- expand.grid(
-  sex = c("F", "M"),
-  cache_year_type = unique(feeding_cones$cache_year_type),
-  log_cache_size_new_prev_year = cache_seq)
-
-#join the average log_total_cones value for each cache_year_type.
-pred_grid <- left_join(pred_grid, average_cones, by = "cache_year_type")
-
-#set typical values for the other predictors.
-pred_grid <- pred_grid %>%
+#calculate the estimates and standard errors for the comparisons
+model_comparisons_feeding_cones <- model_comparisons_feeding_cones %>%
   mutate(
-    repro_stage = "non-breeding",         
-    snow = "no snow",           
-    squirrel_id = NA,                   # population-level predictions
-    log_total_cones_prev_year = avg_log_total)
+    #for comparison of sex-specific effects with standard errors
+    lower = estimate - 1.96 * std.error,
+    upper = estimate + 1.96 * std.error)
 
-#predict on the log scale using your interaction model.
-pred_grid$pred_log_distance <- predict(
-  feeding_cones_model2,
-  newdata = pred_grid,
-  re.form = NA)   #exclude random effects for population-level predictions
+term1 <- model_comparisons_feeding_cones %>% 
+  filter(term == "log_cache_size_new_prev_year")
 
-#back-transform predictions and the cache predictor to actual values.
-pred_grid <- pred_grid %>%
-  mutate(
-    pred_distance = exp(pred_log_distance),
-    cache_size = exp(log_cache_size_new_prev_year))
+term2 <- model_comparisons_feeding_cones %>% 
+  filter(term == "sexM:log_cache_size_new_prev_year")
 
-#plot the results, faceting by the cache_year_type.
-ggplot(pred_grid, aes(x = cache_size, y = pred_distance, color = sex)) +
-  geom_line(size = 1) +
-  facet_wrap(~ cache_year_type) +
-  scale_x_log10(
-    breaks = c(1, 10, 100, 1000, 10000, 100000),
-    labels = c("1", "10", "100", "1K", "10K", "100K")) +   # helpful if cache sizes span multiple orders of magnitude
-  labs(
-    x = "Number of new cones cached",
-    y = "Predicted Feeding Distance (m)",
-    color = "Sex",
-    title = "Predicted Feeding Distance vs. Cones Cached by Year Type"
-  ) +
-  theme_minimal()
+#manually check for overlap
+# Confidence intervals overlap if:
+#   term1 upper >= term2 lower AND term2 upper >= term1 lower
+if (term1$upper >= term2$lower && term2$upper >= term1$lower) {
+  message("The confidence intervals overlap: ",
+          "term1 (", term1$lower, " to ", term1$upper, 
+          ") overlaps with term2 (", term2$lower, " to ", term2$upper, ").")
+} else {
+  message("The confidence intervals do not overlap.")
+}
 
+#clean up model output
+model_output_feeding_cones <- model_output_feeding_cones %>%
+  dplyr::select(-effect, -group)
 
+model_output_feeding_cones <- model_output_feeding_cones[-12, ]
 
-
-
-
+model_output_feeding_cones <- model_output_feeding_cones %>%
+  rename(tvalue = statistic)
 
