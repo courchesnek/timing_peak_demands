@@ -83,3 +83,20 @@ feeding_distances <- feeding %>%
 
 #save
 write.csv(feeding_distances, "Input/feeding_distances.csv", row.names = FALSE)
+
+
+# income plus capital -----------------------------------------------------
+feeding_distances_all <- feeding %>%
+  mutate(
+    #calculate Euclidean distance (in meters)
+    distance_to_midden = sqrt(
+      ((locx_obs_numeric - locx_census_numeric) * 30)^2 + #convert x-difference to meters
+        ((as.numeric(locy_obs) - as.numeric(locy_census)) * 30)^2 #convert y-difference to meters
+    ),
+    #check if the observation is within the buffer radius and within the midden "island"
+    within_territory = distance_to_midden <= buffer_radius_meters,
+    within_midden = distance_to_midden <= midden_radius_meters) %>%
+  na.omit()
+
+#save
+write.csv(feeding_distances_all, "Input/feeding_distances_all.csv", row.names = FALSE)

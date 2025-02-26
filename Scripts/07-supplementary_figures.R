@@ -91,15 +91,20 @@ feeding_proportions <- feeding_proportions %>%
 energetics <- ggplot(feeding_proportions, aes(x = season, y = proportion_DEE, fill = sex)) +
   geom_bar(stat = "identity", position = "dodge", color = "black", width = 0.7) +
   facet_wrap(~food_type, scales = "fixed",
-             labeller = labeller(food_type = c("capital" = "Capital", "income" = "Income"))) +
+             labeller = labeller(food_type = c("capital" = "Cached", "income" = "Fresh"))) +
   labs(
-    title = "Energy Input from Capital vs. Income Food to Meet Daily Energy Requirements by Sex and Season",
+    title = "Energy Input from Cached vs. Fresh Food to Meet Daily Energy Requirements by Sex and Season",
     x = "Season",
     y = "Daily Energy Expenditure (kJ/day)",
     fill = "Sex") +
   scale_fill_manual(
     values = c("F" = "#FF99CC", "M" = "#99CCFF"),
     labels = c("Female", "Male")) +
+  scale_x_discrete(
+    labels = c("winter" = "Winter", 
+               "mating" = "Mating", 
+               "lactation" = "Lactation",
+               "non-breeding" = "Non-breeding")) +
   theme_minimal() +
   theme(
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5),

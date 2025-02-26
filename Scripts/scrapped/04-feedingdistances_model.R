@@ -4,6 +4,22 @@ source("Scripts/00-packages.R")
 #read in data --------------------------------------------------------
 feeding <- read.csv("Input/feeding_distances.csv")
 
+# define DEE values (kJ/day) --------------------------------------------------------------
+DEE_values <- data.frame(
+  sex = c("M", "M", "M", "F", "F", "F"),
+  season = c("winter", "mating", "non-breeding", "winter", "lactation", "non-breeding"),
+  DEE_kJ_day = c(207, 407, 318, 207, 470, 318)) #assuming winter and non-breeding are the same between sexes
+
+# align feeding repro_stage with DEE seasons ------------------------------
+feeding <- feeding %>%
+  mutate(
+    date = as.Date(date),  #ensure the `date` column is in Date format
+    season = case_when(
+      #assign 'winter' if it's non-breeding before May 1
+      repro_stage == "non-breeding" & format(date, "%m-%d") < "05-01" ~ "winter",
+      #keep other values as they are from repro_stage
+      TRUE ~ repro_stage))
+
 #filter for within territory and only capital
 feeding_within_territory <- feeding %>%
   filter(within_territory == TRUE,
