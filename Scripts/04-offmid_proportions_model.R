@@ -2,7 +2,7 @@
 source("Scripts/00-packages.R")
 
 #read in data --------------------------------------------------------
-feeding <- read.csv("Input/feeding_distances.csv")
+feeding <- read.csv("Input/feeding_distances_all.csv")
 
 # define DEE values (kJ/day) --------------------------------------------------------------
 DEE_values <- data.frame(
