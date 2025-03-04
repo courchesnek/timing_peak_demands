@@ -12,57 +12,80 @@ con <- krsp_connect (host = "krsp.cepb5cjvqban.us-east-2.rds.amazonaws.com",
 census <- tbl(con,"census") %>%
   collect()
 
+#remove rows where locx, locy and reflo are all NA - can't do anything with those...
+census <- census %>%
+  filter(!(is.na(locx) & is.na(locy) & is.na(reflo)))
+
 #pull in feeding obs
-# cone_feeding <- read.csv("Input/conefeedingobs.csv")
-# income_feeding <- read.csv("Input/incomefeedingobs.csv")
 all_feeding <- read.csv("Input/allfeedingobs.csv")
 
 #clean up census data before merging
 census <- census %>%
   mutate(census_date = as.Date(census_date))
 
-census_locs <- census %>%
-  filter(format(census_date, "%m-%d") == "05-15") %>%
-  dplyr::select(census_date, gr, squirrel_id, locx, locy, reflo) %>%
-  na.omit()
+census_spring <- census %>%
+  filter(format(census_date, "%m-%d") == "05-15",
+         gr %in% c("KL", "SU", "CH")) %>%
+  dplyr::select(census_date, gr, squirrel_id, locx, locy, reflo)
 
+
+# fix NA reflos ------------------------------------------------------
+census_spring_missing_reflo <- census_spring %>%
+  filter(is.na(reflo))
+
+census_spring <- census_spring %>%
+  mutate(reflo = case_when(
+    is.na(reflo) & locx == "T.0" & locy == "1.0" ~ "T1",
+    is.na(reflo) & locx == "J.5" & locy == "12" ~ "J.12",
+    is.na(reflo) & locx == "D.0" & locy == "7.0" ~ "D7",
+    is.na(reflo) & locx == "C.5" & locy == "17.0" ~ "C.17",
+    is.na(reflo) & locx == "C.5" & locy == "15.5" ~ "C.15.",
+    is.na(reflo) & locx == "B.5" & locy == "10.5" ~ "B.10.",
+    is.na(reflo) & locx == "B.0" & locy == "2.0" ~ "B2",
+    is.na(reflo) & locx == "A.5" & locy == "14.5" ~ "A.14.",
+    is.na(reflo) & locx == "A.0" & locy == "10.5" ~ "A10.",
+    is.na(reflo) & locx == "A.0" & locy == "3.5" ~ "A3.",
+    is.na(reflo) & locx == "21.5" & locy == "2.7" ~ "U.2.",
+    is.na(reflo) & locx == "17.0" & locy == "8.0" ~ "Q8",
+    is.na(reflo) & locx == "14.8" & locy == "6.6" ~ "N.6.",
+    is.na(reflo) & locx == "1.0" & locy == "7.0" ~ "A7",
+    is.na(reflo) & locx == "0.0" & locy == "0.0" ~ "00",
+    is.na(reflo) & locx == "0.0" & locy == "5.5" ~ "05.",
+    is.na(reflo) & locx == "-8.5" & locy == "12.0" ~ "-8.12",
+    is.na(reflo) & locx == "-6.4" & locy == "12.4" ~ "-612",
+    is.na(reflo) & locx == "-6.0" & locy == "10.0" ~ "-610",
+    is.na(reflo) & locx == "-5.0" & locy == "13.0" ~ "-513",
+    is.na(reflo) & locx == "-5.0" & locy == "3.0" ~ "-53",
+    is.na(reflo) & locx == "-4.0" & locy == "9.0" ~ "-49",
+    is.na(reflo) & locx == "-3.0" & locy == "10.0" ~ "-310",
+    is.na(reflo) & locx == "-2.0" & locy == "7.0" ~ "-27",
+    is.na(reflo) & locx == "-2.0" & locy == "11.0" ~ "-211",
+    is.na(reflo) & locx == "-1.0" & locy == "10.0" ~ "-110",
+    is.na(reflo) & locx == "-1.0" & locy == "4.0" ~ "-14",
+    is.na(reflo) & locx == "-1.0" & locy == "1.0" ~ "-11",
+    TRUE ~ reflo)) #keep existing reflo if none of the above conditions are met
 
 # fix weird/missing locs/reflos -------------------------------------------
 #missing reflos
-census_locs$reflo[census_locs$locx == "A.0" & census_locs$locy == 5.5 &
-                       (is.na(census_locs$reflo) | census_locs$reflo == "")] <- "A5."
-
-census_locs$reflo[census_locs$locx == "0.0" & census_locs$locy == 1.5 &
-                    (is.na(census_locs$reflo) | census_locs$reflo == "")] <- "01."
-
-census_locs$reflo[census_locs$locx == "K.0" & census_locs$locy == 2.5 &
-                    (is.na(census_locs$reflo) | census_locs$reflo == "")] <- "K2."
-
-census_locs$reflo[census_locs$locx == "A.0" & census_locs$locy == 4.5 &
-                    (is.na(census_locs$reflo) | census_locs$reflo == "")] <- "A4."
-
-census_locs <- census_locs %>%
-  mutate(reflo = ifelse(census_date == as.Date("2016-05-15") & squirrel_id == 22476, "K.8", reflo))
-
-census_locs <- census_locs %>%
-  mutate(reflo = ifelse(census_date == as.Date("2016-05-15") & squirrel_id == 22229, "K.7", reflo))
+census_spring$reflo[census_spring$locx == "A.0" & census_spring$locy == 5.5 &
+                       (is.na(census_spring$reflo) | census_spring$reflo == "")] <- "A5."
 
 #weird reflos
-census_locs$reflo[census_locs$locx == "-0.4" & census_locs$locy == "13.6"] <- "-0.13."
-census_locs$reflo[census_locs$locx == "-0.5" & census_locs$locy == "5.5"] <- "-0.5."
-census_locs$reflo[census_locs$locx == "-1.2" & census_locs$locy == "14.5"] <- "-114."
+census_spring$reflo[census_spring$locx == "-0.4" & census_spring$locy == "13.6"] <- "-0.13."
+census_spring$reflo[census_spring$locx == "-0.5" & census_spring$locy == "5.5"] <- "-0.5."
+census_spring$reflo[census_spring$locx == "-1.2" & census_spring$locy == "14.5"] <- "-114."
 
 # create new locx/locy columns --------------------------------------------
 #split into subtables
-negatives <- census_locs %>%
+negatives <- census_spring %>%
   filter(grepl("^-", reflo)) %>%
   dplyr::select(-locx, -locy)
 
-letters <- census_locs %>%
+letters <- census_spring %>%
   filter(grepl("^[A-Za-z]", reflo)) %>%
   dplyr::select(-locx, -locy)
 
-zeros <- census_locs %>%
+zeros <- census_spring %>%
   filter(grepl("^0", reflo)) %>%
   dplyr::select(-locx, -locy)
 
@@ -295,7 +318,8 @@ all_feeding_census <- all_feeding %>%
   left_join(census_clean %>%
               dplyr::select(squirrel_id, year, locx, locy),
             by = c("squirrel_id", "year"), relationship = "many-to-many") %>%
-  rename(locx_census = locx.y, locy_census = locy.y, locx_obs = locx.x, locy_obs = locy.x)
+  rename(locx_census = locx.y, locy_census = locy.y, locx_obs = locx.x, locy_obs = locy.x) %>%
+  na.omit() #remove feeding events by squirrels with no census record
 
 #save
 write.csv(all_feeding_census, "Input/all_feeding_census.csv", row.names = FALSE)

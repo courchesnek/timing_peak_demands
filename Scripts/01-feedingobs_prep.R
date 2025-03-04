@@ -93,21 +93,21 @@ feeding <- feeding %>%
   filter(!is.na(food_type))
 
 #create a column for snow cover
-feeding <- feeding %>%
-  mutate(
-    snow = case_when(
-      #snow period: October 15 to May 14
-      (month(date) %in% c(11, 12, 1, 2, 3, 4) | 
-         (month(date) == 10 & day(date) >= 15) | 
-         (month(date) == 5 & day(date) <= 14)) ~ "snow",
-      
-      #no-snow period: May 15 to October 14
-      (month(date) %in% c(6, 7, 8, 9) | 
-         (month(date) == 10 & day(date) <= 14) | 
-         (month(date) == 5 & day(date) >= 15)) ~ "no snow",
-      
-      #default: this should never trigger if the above cases are correct
-      TRUE ~ "error"))
+# feeding <- feeding %>%
+#   mutate(
+#     snow = case_when(
+#       #snow period: October 15 to May 14
+#       (month(date) %in% c(11, 12, 1, 2, 3, 4) | 
+#          (month(date) == 10 & day(date) >= 15) | 
+#          (month(date) == 5 & day(date) <= 14)) ~ "snow",
+#       
+#       #no-snow period: May 15 to October 14
+#       (month(date) %in% c(6, 7, 8, 9) | 
+#          (month(date) == 10 & day(date) <= 14) | 
+#          (month(date) == 5 & day(date) >= 15)) ~ "no snow",
+#       
+#       #default: this should never trigger if the above cases are correct
+#       TRUE ~ "error"))
 
 #only keep control grids - CH/KL/SU
 feeding <- feeding %>%
