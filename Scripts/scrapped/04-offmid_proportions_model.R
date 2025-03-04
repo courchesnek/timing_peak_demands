@@ -96,6 +96,8 @@ feeding_within_territory %>%
     off_midden   = sum(!within_midden, na.rm = TRUE),
     unique_squirrels = n_distinct(squirrel_id))
 
+unique_years <- unique(feeding_within_territory$year)
+
 # model binary outcome for feeding off midden --------------------------
 feeding_within_territory <- feeding_within_territory %>%
   mutate(year_type = factor(year_type, levels = c("non-mast", "mast", "post-mast")),
