@@ -214,6 +214,12 @@ letter_without_dot <- letter_without_dot %>%
     reflo = ifelse(census_date == as.Date("2012-05-15") & gr == "LL" & squirrel_id == 12372, "U-0.", reflo),
     locy = ifelse(census_date == as.Date("2012-05-15") & gr == "LL" & squirrel_id == 12372, "-0.5", locy))
 
+letter_without_dot <- letter_without_dot %>%
+  mutate(
+    reflo = ifelse(census_date == as.Date("2022-05-15") & gr == "KL" & squirrel_id == 25335, "B2", reflo),
+    locx = ifelse(census_date == as.Date("2022-05-15") & gr == "KL" & squirrel_id == 25335, "B.0", locx),
+    locy = ifelse(census_date == as.Date("2022-05-15") & gr == "KL" & squirrel_id == 25335, "2.0", locy))
+
 #split again based on dots for negatives
 negatives_with_dot <- negatives %>%
   filter(grepl("^-\\d*\\.\\d", reflo) & !is.na(reflo) & nchar(reflo) >= 3)  #decimal in the third position
@@ -223,11 +229,14 @@ negatives_without_dot <- negatives %>%
 
 #make locx and locy columns 
 ##with dot 
+##fix one weird reflo
+negatives_with_dot <- negatives_with_dot %>%
+  mutate(reflo = ifelse(reflo == "-7.5, -7.6", "-7.6", reflo))
+
 negatives_with_dot <- negatives_with_dot %>%
   mutate(
     locx = substr(reflo, 1, 3),  #extract the first three characters for locx
-    locy = str_remove(reflo, "^.{3}")  #remove the first three characters to get locy, keeping everything after
-  )
+    locy = str_remove(reflo, "^.{3}"))  #remove the first three characters to get locy, keeping everything after
 
 ##add .5 to locx
 negatives_with_dot <- negatives_with_dot %>%
@@ -350,6 +359,9 @@ letter_without_dot_old <- letters_old %>%
   filter(!grepl("^[A-Za-z]\\.", reflo) & !is.na(reflo) & nchar(reflo) >= 2)
 
 ##letters with dots
+#fix one weird reflo
+letter_with_dot_old$reflo[letter_with_dot_old$reflo == "F.-.5"] <- "F.0."
+
 #add locx/locy
 letter_with_dot_old <- letter_with_dot_old %>%
   mutate(
@@ -378,6 +390,10 @@ letter_without_dot_old <- letter_without_dot_old %>%
     locy = str_remove(reflo, "^[A-Za-z]")  #remove the letter to get locy
   ) %>%
   mutate(locy = str_trim(locy))
+
+#fix one weird reflo and locy
+letter_without_dot_old$reflo[letter_without_dot_old$locx == "E.0" & letter_without_dot_old$locy == "-1.0"] <- "E1"
+letter_without_dot_old$locy[letter_without_dot_old$locx == "E.0" & letter_without_dot_old$locy == "-1.0"] <- "1.0"
 
 #add the .0's and .5's
 ##add .0 to locx
@@ -501,7 +517,6 @@ census_clean_old <- bind_rows(
   zeros_without_dot_old) %>%
   rename(gr = grid, 
          census_date = date)
-
 
 # merge old and new census tables together --------------------------------
 census_clean <- bind_rows(census_clean_new, census_clean_old)
