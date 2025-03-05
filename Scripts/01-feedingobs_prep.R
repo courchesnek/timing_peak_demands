@@ -16,17 +16,16 @@ litters <- tbl(con,"litter") %>%
   collect()
 
 #pull feeding obs from behaviour table
-numeric_to_month_abbrev <- function(month_num) {
-  month.abb[month_num]}
-
 feeding <- behaviour %>%
   collect() %>%
   dplyr::select(id, behaviour, date, detail, grid, mode, squirrel_id, time, locx, locy) %>%
   collect() %>%
   filter(behaviour == 1,  #feeding observations
-         mode %in% c(1,3)) %>% #cas obs or focals
+         mode %in% c(1,3), #cas obs or focals
+         grid %in% c("KL", "SU", "CH")) %>% #only keep control grids
   mutate(
-    year = year(ymd(date)))
+    year = year(ymd(date))) %>%
+  na.omit()
 
 #we still need the sex of the squirrels here so let's connect to the flastall (first_last_all contains first last records of squirrels and is really handy for this type of stuff)... 
 # ...pull squirrel_id and sex, then link that to the feeding table
@@ -41,32 +40,32 @@ feeding <- left_join(feeding, squirrel_sex, by = "squirrel_id") %>%
 #double check if any NAs in sex column
 length(feeding$sex[is.na(feeding$sex) == TRUE])
 
-##calculate breeding windows; -35 days from earliest fieldBDate = start and -35 days from latest = end
+##calculate mating windows; -35 days from earliest fieldBDate = start and -35 days from latest = end
 #ensure fieldBDate is in date format
 litters$fieldBDate <- as.Date(litters$fieldBDate)
 
-breeding_lac <- litters %>%
+mating_lac <- litters %>%
   filter(year(fieldBDate) >= 1987 & year(fieldBDate) <= 2023, ln ==1) %>% #first litters only
   group_by(year = year(fieldBDate)) %>%
   summarise(
     earliest_birth_date = min(fieldBDate),
     latest_birth_date = max(fieldBDate),
-    breeding_start = min(fieldBDate) - days(35),
-    breeding_end = max(fieldBDate) - days(35))
+    mating_start = min(fieldBDate) - days(35),
+    mating_end = max(fieldBDate) - days(35))
 
 ##calculate lac windows; earliest fieldBDate = start and +70 days from latest fieldBDate = end
-breeding_lac <- breeding_lac %>%
+mating_lac <- mating_lac %>%
   mutate(
-    start_lactation = earliest_birth_date,  
-    end_lactation = latest_birth_date + 70)
+    lactation_start = earliest_birth_date,  
+    lactation_end = latest_birth_date + 70)
 
 #create a column for repro stage by year for mating and lactating
 feeding <- feeding %>%
-  left_join(breeding_lac, by = "year") %>%  #join the breeding window data by year
+  left_join(mating_lac, by = "year") %>%  #join the mating window data by year
   mutate(
     repro_stage = case_when(
-      date >= earliest_birth_date & date <= latest_birth_date ~ "mating",
-      date > latest_birth_date & date <= end_lactation ~ "lactation",
+      date >= mating_start & date <= mating_end ~ "mating",
+      date >= lactation_start & date <= lactation_end ~ "lactation",
       TRUE ~ "non-breeding")) #anything outside of mating and lactation = non-breeding
 
 feeding <- feeding %>%
@@ -109,10 +108,6 @@ feeding <- feeding %>%
 #       #default: this should never trigger if the above cases are correct
 #       TRUE ~ "error"))
 
-#only keep control grids - CH/KL/SU
-feeding <- feeding %>%
-  filter(grid %in% c("KL", "SU", "CH"))
-
 #add year type column
 ##define mast years
 mast_years <- c(1993, 1998, 2005, 2010, 2014, 2019, 2022)
@@ -129,4 +124,11 @@ feeding <- feeding %>%
 #save
 write.csv(feeding, "Input/allfeedingobs.csv", row.names = FALSE)
 
+# data summary ------------------------------------------------------------
+feeding_summary <- feeding %>%
+  group_by(year, sex, repro_stage, food_type) %>%
+  summarise(num_events = n(), .groups = "drop") %>%
+  complete(year, sex, repro_stage, food_type, fill = list(num_events = 0))
 
+#save
+write.csv(feeding_summary, "Output/feeding_summary.csv", row.names = FALSE)

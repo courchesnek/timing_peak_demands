@@ -124,7 +124,7 @@ feeding <- feeding %>%
 # b) the midden "island" (10m radius)
 
 buffer_radius_meters <- 52 #52m radius in meteres
-midden_radius_meters <- 10 #10m midden "island" radius in meters
+midden_radius_meters <- 11 #10m midden "island" radius +/- 1m error
 
 #calculate Euclidean distance and determine if within buffer
 feeding_distances <- feeding %>%

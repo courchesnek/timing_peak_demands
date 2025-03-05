@@ -2,12 +2,11 @@
 source("Scripts/00-packages.R")
 
 #read in data --------------------------------------------------------
-feeding <- read.csv("Input/feeding_distances_all.csv")
+feeding <- read.csv("Input/feeding_distances.csv")
 
 #filter for within territory and only capital
 feeding_within_territory <- feeding %>%
-  filter(within_territory == TRUE,
-         food_type == "capital")
+  filter(within_territory == TRUE)
 
 #compare prop of on vs off midden feeding events between the sexes ----------------
 feeding_proportions <- feeding_within_territory %>%
@@ -41,6 +40,11 @@ feeding_proportions_plot
 #save
 ggsave("Output/feeding_proportions.jpeg", plot = feeding_proportions_plot, width = 12, height = 6)
 
+
+
+# test on one year where snow on the ground, not a mast.  -----------------
+
+
 # male on- vs off-midden cone feeding during mating -----------------------
 male_feeding <- feeding_within_territory %>%
   filter(sex == "M", repro_stage == "mating") %>%
@@ -60,8 +64,7 @@ binomial_test <- binom.test(male_feeding$on_midden,
                             p = 1)
 
 print(binomial_test)
-#roughly 50% of feeding events by males during mating are on-midden, strongly reject P1.
-
+#roughly 75.5% of feeding events by males during mating occurred on-midden, reject P1.
 
 # plot --------------------------------------------------------------------
 male_feeding_year <- feeding %>%
@@ -86,13 +89,21 @@ male_feeding_long <- male_feeding_year %>%
 male_feeding_long <- male_feeding_long %>%
   mutate(year_f = factor(year, levels = sort(unique(year))))
 
-mast_years <- c("2014", "2019", "2022")
+# mast_years <- c("2014", "2019", "2022")
+# mast_positions <- which(levels(male_feeding_long$year_f) %in% mast_years)
+# highlight_df <- data.frame(
+#   xmin = mast_positions - 0.5,
+#   xmax = mast_positions + 0.5)
 
-mast_positions <- which(levels(male_feeding_long$year_f) %in% mast_years)
-
+highlight_years <- c("2012", "2016", "2017", "2021")
+highlight_positions <- which(levels(male_feeding_long$year_f) %in% highlight_years)
 highlight_df <- data.frame(
-  xmin = mast_positions - 0.5,
-  xmax = mast_positions + 0.5)
+  xmin = highlight_positions - 0.5,
+  xmax = highlight_positions + 0.5)
+
+sample_sizes <- male_feeding_long %>%
+  group_by(year_f) %>%
+  summarise(total_count = sum(count), .groups = "drop")
 
 #stacked bar graph
 male_cone_feeding <- ggplot(male_feeding_long, aes(x = as.numeric(year_f), y = count, fill = location)) +
@@ -110,7 +121,11 @@ male_cone_feeding <- ggplot(male_feeding_long, aes(x = as.numeric(year_f), y = c
        y = "Proportion of Cone Feeding Events",
        title = "On vs Off Midden Cone Feeding by Males During Mating",
        fill = "Feeding Location") +
-  theme_minimal() +
+  geom_text(data = sample_sizes,
+            aes(x = as.numeric(year_f), y = 1.05, label = total_count),
+            inherit.aes = FALSE,
+            vjust = 0, size = 5) +
+  theme_minimal(base_size = 14) +
   theme(plot.title = element_text(hjust = 0.5))
 
 male_cone_feeding
