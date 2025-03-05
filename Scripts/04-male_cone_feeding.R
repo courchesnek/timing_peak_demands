@@ -41,10 +41,6 @@ feeding_proportions_plot
 ggsave("Output/feeding_proportions.jpeg", plot = feeding_proportions_plot, width = 12, height = 6)
 
 
-
-# test on one year where snow on the ground, not a mast.  -----------------
-
-
 # male on- vs off-midden cone feeding during mating -----------------------
 male_feeding <- feeding_within_territory %>%
   filter(sex == "M", repro_stage == "mating") %>%
@@ -64,10 +60,10 @@ binomial_test <- binom.test(male_feeding$on_midden,
                             p = 1)
 
 print(binomial_test)
-#roughly 75.5% of feeding events by males during mating occurred on-midden, reject P1.
+#roughly 70.7% of feeding events by males during mating occurred on-midden, reject P1.
 
 # plot --------------------------------------------------------------------
-male_feeding_year <- feeding %>%
+male_feeding_year <- feeding_within_territory %>%
   filter(sex == "M", repro_stage == "mating") %>%
   group_by(year) %>%
   summarise(
@@ -95,7 +91,7 @@ male_feeding_long <- male_feeding_long %>%
 #   xmin = mast_positions - 0.5,
 #   xmax = mast_positions + 0.5)
 
-highlight_years <- c("2012", "2016", "2017", "2021")
+highlight_years <- c("2001", "2004", "2007", "2009","2012", "2016", "2017", "2021")
 highlight_positions <- which(levels(male_feeding_long$year_f) %in% highlight_years)
 highlight_df <- data.frame(
   xmin = highlight_positions - 0.5,
@@ -108,12 +104,16 @@ sample_sizes <- male_feeding_long %>%
 #stacked bar graph
 male_cone_feeding <- ggplot(male_feeding_long, aes(x = as.numeric(year_f), y = count, fill = location)) +
   geom_rect(data = highlight_df,
-            aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
+            aes(xmin = xmin, xmax = xmax, ymin = 0, ymax = Inf),
             fill = "grey10", alpha = 0.5, inherit.aes = FALSE) +
   geom_bar(stat = "identity", position = position_fill(reverse = TRUE)) +
   scale_x_continuous(breaks = 1:length(levels(male_feeding_long$year_f)),
-                     labels = levels(male_feeding_long$year_f)) +
-  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+                     labels = levels(male_feeding_long$year_f),
+                     expand = c(0, 0),
+                     limits = c(0.5, length(levels(male_feeding_long$year_f)) + 0.5)) +
+  scale_y_continuous(labels = percent_format(accuracy = 1),
+                     expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0, 1.05), clip = "off") +
   scale_fill_manual(values = c("#33CC66", "#996600"), 
                     labels = c("Off Midden", "On Midden"),
                     guide = guide_legend(reverse = TRUE)) +
@@ -124,9 +124,13 @@ male_cone_feeding <- ggplot(male_feeding_long, aes(x = as.numeric(year_f), y = c
   geom_text(data = sample_sizes,
             aes(x = as.numeric(year_f), y = 1.05, label = total_count),
             inherit.aes = FALSE,
-            vjust = 0, size = 5) +
+            vjust = -0.4, size = 5) +
   theme_minimal(base_size = 14) +
-  theme(plot.title = element_text(hjust = 0.5))
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.75),
+        panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5, margin = margin(b=30)),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20))
 
 male_cone_feeding
 
@@ -134,8 +138,13 @@ male_cone_feeding
 ggsave("Output/male_cone_feeding.jpeg", plot = male_cone_feeding, width = 8, height = 6)
 
 
+# data summary ------------------------------------------------------------
+feeding_location_summary <- feeding_within_territory %>%
+  mutate(location = if_else(within_midden, "On Midden", "Off Midden")) %>%
+  group_by(year, sex, repro_stage, location) %>%
+  summarise(num_events = n(), .groups = "drop") %>%
+  complete(year, sex, repro_stage, location, fill = list(num_events = 0))
 
-
-
-
+#save
+write.csv(feeding_location_summary, "Output/feeding_location_summary.csv", row.names = FALSE)
 

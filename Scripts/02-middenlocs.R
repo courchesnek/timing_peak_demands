@@ -8,16 +8,22 @@ con <- krsp_connect (host = "krsp.cepb5cjvqban.us-east-2.rds.amazonaws.com",
                      username = Sys.getenv("krsp_user"),
                      password = Sys.getenv("krsp_password"))
 
-#pull in census table
+#pull in squirrel census and midden table
 census <- tbl(con,"census") %>%
   collect()
+
+census_middens <- tbl(con, "dbamidden") %>%
+  collect()
+
+#pull in feeding obs
+all_feeding <- read.csv("Input/allfeedingobs.csv")
 
 #remove rows where locx, locy and reflo are all NA - can't do anything with those...
 census <- census %>%
   filter(!(is.na(locx) & is.na(locy) & is.na(reflo)))
 
-#pull in feeding obs
-all_feeding <- read.csv("Input/allfeedingobs.csv")
+census_middens <- census_middens %>%
+  filter(!(is.na(locX) & is.na(locY) & is.na(reflo)))
 
 #clean up census data before merging
 census <- census %>%
@@ -28,8 +34,20 @@ census_spring <- census %>%
          gr %in% c("KL", "SU", "CH")) %>%
   dplyr::select(census_date, gr, squirrel_id, locx, locy, reflo)
 
+census_middens <- census_middens %>%
+  mutate(date = as.Date(date))
+
+census_middens_spring <- census_middens %>%
+  filter(format(date, "%m-%d") == "05-15",
+         grid %in% c("KL", "SU", "CH")) %>%
+  dplyr::select(date, grid, squirrel_id, locX, locY, reflo)
+
+#remove rows where squirrel_id = NA - can't do anything with those
+census_middens_spring <- census_middens_spring %>%
+  filter(!is.na(squirrel_id))
 
 # fix NA reflos ------------------------------------------------------
+#2012-present
 census_spring_missing_reflo <- census_spring %>%
   filter(is.na(reflo))
 
@@ -65,6 +83,10 @@ census_spring <- census_spring %>%
     is.na(reflo) & locx == "-1.0" & locy == "1.0" ~ "-11",
     TRUE ~ reflo)) #keep existing reflo if none of the above conditions are met
 
+#1987-2011
+census_middens_spring_missing_reflo <- census_middens_spring %>%
+  filter(is.na(reflo)) #no missing reflos!
+
 # fix weird/missing locs/reflos -------------------------------------------
 #missing reflos
 census_spring$reflo[census_spring$locx == "A.0" & census_spring$locy == 5.5 &
@@ -75,7 +97,7 @@ census_spring$reflo[census_spring$locx == "-0.4" & census_spring$locy == "13.6"]
 census_spring$reflo[census_spring$locx == "-0.5" & census_spring$locy == "5.5"] <- "-0.5."
 census_spring$reflo[census_spring$locx == "-1.2" & census_spring$locy == "14.5"] <- "-114."
 
-# create new locx/locy columns --------------------------------------------
+# create new locx/locy columns 2012-present --------------------------------------------
 #split into subtables
 negatives <- census_spring %>%
   filter(grepl("^-", reflo)) %>%
@@ -89,7 +111,7 @@ zeros <- census_spring %>%
   filter(grepl("^0", reflo)) %>%
   dplyr::select(-locx, -locy)
 
-#letters --------------------------------------------------------------------
+#letters
 ##split based on dots
 letter_with_dot <- letters %>%
   filter(grepl("^[A-Za-z]\\.", reflo) & !is.na(reflo) & nchar(reflo) >= 2)
@@ -192,7 +214,7 @@ letter_without_dot <- letter_without_dot %>%
     reflo = ifelse(census_date == as.Date("2012-05-15") & gr == "LL" & squirrel_id == 12372, "U-0.", reflo),
     locy = ifelse(census_date == as.Date("2012-05-15") & gr == "LL" & squirrel_id == 12372, "-0.5", locy))
 
-#split again based on dots for negatives ---------------------------------------------------------------
+#split again based on dots for negatives
 negatives_with_dot <- negatives %>%
   filter(grepl("^-\\d*\\.\\d", reflo) & !is.na(reflo) & nchar(reflo) >= 3)  #decimal in the third position
 
@@ -242,7 +264,7 @@ negatives_without_dot <- negatives_without_dot %>%
       paste0(locy, ".0")   #append .0 if no decimal in the 2nd or 3rd position
     ))
 
-#split the zeros based on dots ----------------------------------------
+#split the zeros based on dots
 zeros_with_dot <- zeros %>%
   filter(grepl("^0\\.\\d", reflo) & !is.na(reflo))
 
@@ -296,8 +318,8 @@ zeros_without_dot <- zeros_without_dot %>%
     locx = ifelse(reflo == "0.-0", "0.5", locx),
     locy = ifelse(reflo == "0.-0", "-0.0", locy))
 
-# merge all tables back together ------------------------------------------
-census_clean <- bind_rows(
+# merge all tables back together
+census_clean_new <- bind_rows(
   letter_with_dot,
   letter_without_dot,
   negatives_with_dot,
@@ -305,7 +327,187 @@ census_clean <- bind_rows(
   zeros_with_dot,
   zeros_without_dot)
 
-write.csv(census_clean, "Input/census_clean.csv", row.names = FALSE)
+# create new locx/locy columns 1987-2012 --------------------------------------------
+#split into subtables
+negatives_old <- census_middens_spring %>%
+  filter(grepl("^-", reflo)) %>%
+  dplyr::select(-locX, -locY)
+
+letters_old <- census_middens_spring %>%
+  filter(grepl("^[A-Za-z]", reflo)) %>%
+  dplyr::select(-locX, -locY)
+
+zeros_old <- census_middens_spring %>%
+  filter(grepl("^0", reflo)) %>%
+  dplyr::select(-locX, -locY)
+
+#letters 
+##split based on dots
+letter_with_dot_old <- letters_old %>%
+  filter(grepl("^[A-Za-z]\\.", reflo) & !is.na(reflo) & nchar(reflo) >= 2)
+
+letter_without_dot_old <- letters_old %>%
+  filter(!grepl("^[A-Za-z]\\.", reflo) & !is.na(reflo) & nchar(reflo) >= 2)
+
+##letters with dots
+#add locx/locy
+letter_with_dot_old <- letter_with_dot_old %>%
+  mutate(
+    locx = str_extract(reflo, "^[A-Za-z]\\."),  #extract letter and decimal point
+    locy = str_extract(reflo, "(?<=\\.)[0-9]+\\.?")  #remove locx part to get locy
+  )
+
+#add the .0's and .5's
+##add .5 to locx
+letter_with_dot_old <- letter_with_dot_old %>%
+  mutate(locx = paste0(locx, "5"))
+
+##add either .0 or .5 to locy
+letter_with_dot_old <- letter_with_dot_old %>%
+  mutate(
+    locy = ifelse(
+      nchar(reflo) >= 4 & (substr(reflo, 4, 4) == "." | substr(reflo, 5, 5) == "."),
+      paste0(locy, "5"),  #add .5 if decimal is in the 4th or 5th position of reflo
+      paste0(locy, ".0")   #add .0 if no decimal in the 4th or 5th position of reflo
+    ))
+
+#now for letters without dots
+letter_without_dot_old <- letter_without_dot_old %>%
+  mutate(
+    locx = str_extract(reflo, "^[A-Za-z]"),  #extract letter
+    locy = str_remove(reflo, "^[A-Za-z]")  #remove the letter to get locy
+  ) %>%
+  mutate(locy = str_trim(locy))
+
+#add the .0's and .5's
+##add .0 to locx
+letter_without_dot_old <- letter_without_dot_old %>%
+  mutate(locx = paste0(locx, ".0"))
+
+##add either .0 or .5 to locy
+letter_without_dot_old <- letter_without_dot_old %>%
+  mutate(
+    locy = ifelse(
+      nchar(locy) >= 2 & (substr(locy, 2, 2) == "." | substr(locy, 3, 3) == "."),
+      paste0(locy, "5"),  #append 5 if there is a decimal in the 2nd or 3rd position
+      paste0(locy, ".0")   #append .0 if no decimal in the 2nd or 3rd position
+    ))
+
+#split again based on dots for negatives 
+negatives_with_dot_old <- negatives_old %>%
+  filter(grepl("^-\\d*\\.\\d", reflo) & !is.na(reflo) & nchar(reflo) >= 3)  #decimal in the third position
+
+negatives_without_dot_old <- negatives_old %>%
+  filter(!grepl("^-\\d*\\.\\d", reflo) & !is.na(reflo) & nchar(reflo) >= 3)  #no decimal in the third position
+
+#make locx and locy columns 
+##with dot 
+negatives_with_dot_old <- negatives_with_dot_old %>%
+  mutate(
+    locx = substr(reflo, 1, 3),  #extract the first three characters for locx
+    locy = str_remove(reflo, "^.{3}")  #remove the first three characters to get locy, keeping everything after
+  )
+
+##add .5 to locx
+negatives_with_dot_old <- negatives_with_dot_old %>%
+  mutate(
+    locx = paste0(locx, "5")  #add 5 after the decimal in locx
+  )
+
+##add either .0 or .5 to locy
+negatives_with_dot_old <- negatives_with_dot_old %>%
+  mutate(
+    locy = ifelse(
+      nchar(locy) >= 2 & (substr(locy, 2, 2) == "." | substr(locy, 3, 3) == "."),
+      paste0(locy, "5"),  #append 5 if there is a decimal in the 2nd or 3rd position
+      paste0(locy, ".0")   #append .0 if no decimal in the 2nd or 3rd position
+    ))
+
+##without dot
+#create locx and locy columns
+negatives_without_dot_old <- negatives_without_dot_old %>%
+  mutate(
+    locx = str_extract(reflo, "^-\\d"),  #extract the negative sign and first digit
+    locy = str_remove(reflo, "^-\\d")  #remove the locx part to get locy (everything after)
+  )
+
+##add .0 to locx
+negatives_without_dot_old <- negatives_without_dot_old %>%
+  mutate(locx = paste0(locx, ".0"))
+
+negatives_without_dot_old <- negatives_without_dot_old %>%
+  mutate(
+    locy = ifelse(
+      nchar(locy) >= 2 & (substr(locy, 2, 2) == "." | substr(locy, 3, 3) == "."),
+      paste0(locy, "5"),  #append 5 if there is a decimal in the 2nd or 3rd position
+      paste0(locy, ".0")   #append .0 if no decimal in the 2nd or 3rd position
+    ))
+
+#split the zeros based on dots 
+zeros_with_dot_old <- zeros_old %>%
+  filter(grepl("^0\\.\\d", reflo) & !is.na(reflo))
+
+zeros_without_dot_old <- zeros_old %>%
+  filter(!grepl("^0\\.\\d", reflo) & !is.na(reflo))
+
+#create locx and locy columns
+zeros_with_dot_old <- zeros_with_dot_old %>%
+  mutate(
+    locx = str_extract(reflo, "^0\\."),
+    locy = str_remove(reflo, "^0\\."))
+
+#add .5 to locx
+zeros_with_dot_old <- zeros_with_dot_old %>%
+  mutate(
+    locx = paste0(locx, "5"))
+
+#add either .0 or .5 to locy
+zeros_with_dot_old <- zeros_with_dot_old %>%
+  mutate(
+    locy = ifelse(
+      nchar(locy) >= 2 & (substr(locy, 2, 2) == "." | substr(locy, 3, 3) == "."),
+      paste0(locy, "5"),  #append 5 if there is a decimal in the 2nd or 3rd position
+      paste0(locy, ".0")   #append .0 if no decimal in the 2nd or 3rd position
+    ))
+
+#create locx and locy columns
+zeros_without_dot_old <- zeros_without_dot_old %>%
+  mutate(
+    locx = str_extract(reflo, "^0") ,  #extract the "0" for locx
+    locy = str_remove(reflo, "^0")  # Everything after "0" becomes locy
+  )
+
+#add .0 to locx
+zeros_without_dot_old <- zeros_without_dot_old %>%
+  mutate(
+    locx = paste0(locx, ".0"))
+
+#add either .0 or .5 to locy
+zeros_without_dot_old <- zeros_without_dot_old %>%
+  mutate(
+    locy = ifelse(
+      nchar(locy) >= 2 & (substr(locy, 2, 2) == "." | substr(locy, 3, 3) == "."),
+      paste0(locy, "5"),  #append 5 if there is a decimal in the 2nd or 3rd position
+      paste0(locy, ".0")   #append .0 if no decimal in the 2nd or 3rd position
+    ))
+
+# merge all tables back together
+census_clean_old <- bind_rows(
+  letter_with_dot_old,
+  letter_without_dot_old,
+  negatives_with_dot_old,
+  negatives_without_dot_old,
+  zeros_with_dot_old,
+  zeros_without_dot_old) %>%
+  rename(gr = grid, 
+         census_date = date)
+
+
+# merge old and new census tables together --------------------------------
+census_clean <- bind_rows(census_clean_new, census_clean_old)
+
+#save
+write.csv(census_clean, "Output/census_clean.csv", row.names = FALSE)
 
 # add census locs to feeding obs ------------------------------------------
 all_feeding <- all_feeding %>%
@@ -323,3 +525,12 @@ all_feeding_census <- all_feeding %>%
 
 #save
 write.csv(all_feeding_census, "Input/all_feeding_census.csv", row.names = FALSE)
+
+# feeding summary ---------------------------------------------------------
+feeding_summary_census <- all_feeding_census %>%
+  group_by(year, sex, repro_stage, food_type) %>%
+  summarise(num_events = n(), .groups = "drop") %>%
+  complete(year, sex, repro_stage, food_type, fill = list(num_events = 0))
+
+#save
+write.csv(feeding_summary_census, "Output/feeding_summary_census.csv", row.names = FALSE)
