@@ -59,6 +59,9 @@ mating_lac <- mating_lac %>%
     lactation_start = earliest_birth_date,  
     lactation_end = latest_birth_date + 70)
 
+#save
+write.csv(mating_lac, "Input/reproductive_windows.csv", row.names = FALSE)
+
 #create a column for repro stage by year for mating and lactating
 feeding <- feeding %>%
   left_join(mating_lac, by = "year") %>%  #join the mating window data by year
@@ -83,8 +86,8 @@ feeding <- feeding %>%
   filter(!(detail %in% c(10, 12, 14, 24, 25, 26, 30)))
 
 #group food types for comparisons
-income <- c(1, 3, 4, 5, 6, 7, 8, 9, 11, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 27, 28, 29, 31, 32) #income = all other natural resources found fresh on the landscape - UNCACHED
-capital <- c(2) #capital = old cones, CACHED
+income <- c(1, 3, 5, 6, 7, 8, 9, 11, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 27, 28, 29, 31, 32) #income = all other natural resources found fresh on the landscape
+capital <- c(2,4) #capital = old cones and mushrooms/truffle
 
 feeding <- feeding %>%
   mutate(food_type = ifelse(detail %in% income, "income", 

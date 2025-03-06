@@ -30,36 +30,36 @@ feeding <- feeding %>%
          midden_radius = midden_radius)
 
 #plot with a panel for each grid
-census_mids_buff <- ggplot(feeding, aes(x = locx_census_numeric, y = as.numeric(locy_census))) +
-  #plot midden locations, colored by grid
-  geom_point(aes(color = grid), size = 1, show.legend = FALSE) +
-  #add the 52m buffer (territory size)
-  geom_circle(
-    aes(x0 = locx_census_numeric, 
-        y0 = as.numeric(locy_census),
-        r = buffer_radius),
-        color = "red", fill = NA, alpha = 0.5) +
-  #add the 10m buffer (midden "island")
-  geom_circle(
-    aes(x0 = locx_census_numeric, 
-        y0 = as.numeric(locy_census),
-        r = midden_radius),
-        color = "blue", fill = NA, alpha = 0.5) +
-  #facet by grid
-  facet_wrap(~ grid, scales = "free") + 
-  #add labels and titles
-  labs(title = "Midden and Territory Boundaries by Grid",
-    x = "locx",
-    y = "locy") +
-  theme_minimal() +
-  theme(
-    strip.text = element_text(size = 10),
-    plot.title = element_text(hjust = 0.5))
-
-census_mids_buff
-
-#save
-ggsave("Output/census_mids_buff.jpeg", plot = census_mids_buff, width = 8, height = 6)
+# census_mids_buff <- ggplot(feeding, aes(x = locx_census_numeric, y = as.numeric(locy_census))) +
+#   #plot midden locations, colored by grid
+#   geom_point(aes(color = grid), size = 1, show.legend = FALSE) +
+#   #add the 52m buffer (territory size)
+#   geom_circle(
+#     aes(x0 = locx_census_numeric, 
+#         y0 = as.numeric(locy_census),
+#         r = buffer_radius),
+#         color = "red", fill = NA, alpha = 0.5) +
+#   #add the 10m buffer (midden "island")
+#   geom_circle(
+#     aes(x0 = locx_census_numeric, 
+#         y0 = as.numeric(locy_census),
+#         r = midden_radius),
+#         color = "blue", fill = NA, alpha = 0.5) +
+#   #facet by grid
+#   facet_wrap(~ grid, scales = "free") + 
+#   #add labels and titles
+#   labs(title = "Midden and Territory Boundaries by Grid",
+#     x = "locx",
+#     y = "locy") +
+#   theme_minimal() +
+#   theme(
+#     strip.text = element_text(size = 10),
+#     plot.title = element_text(hjust = 0.5))
+# 
+# census_mids_buff
+# 
+# #save
+# ggsave("Output/census_mids_buff.jpeg", plot = census_mids_buff, width = 8, height = 6)
 
 
 # fix incorrectly entered locx and locy feeding obs -----------------------
@@ -128,7 +128,7 @@ midden_radius_meters <- 13 #10m midden "island" radius +/- 3m error
 
 #calculate Euclidean distance and determine if within buffer
 feeding_distances <- feeding %>%
-  filter(food_type == "capital") %>% #filter for only old/cached cone feeding events
+  filter(food_type == "capital") %>% #filter for only old cone feeding events
   mutate(
     #calculate Euclidean distance (in meters)
     distance_to_midden = sqrt(

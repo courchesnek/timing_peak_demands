@@ -1,4 +1,4 @@
-"year","earliest_birth_date","latest_birth_date","breeding_start","breeding_end","start_lactation","end_lactation"
+year,earliest_birth_date,latest_birth_date,mating_start,mating_end,lactation_start,lactation_end
 1987,1987-02-03,1987-05-13,1986-12-30,1987-04-08,1987-02-03,1987-07-22
 1988,1988-04-02,1988-06-02,1988-02-27,1988-04-28,1988-04-02,1988-08-11
 1989,1989-03-12,1989-05-20,1989-02-05,1989-04-15,1989-03-12,1989-07-29
