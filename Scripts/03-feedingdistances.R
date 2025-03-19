@@ -78,7 +78,7 @@ feeding <- feeding %>%
     locx_obs = str_replace_all(locx_obs, ",", "."),
     locy_obs = str_replace_all(locy_obs, ",", "."))
 
-#fix bad loc entries - capital feeding
+#fix bad loc entries
 feeding <- feeding %>%
   mutate(
     locx_obs = if_else(locx_obs == "D5.0", "D.5", locx_obs),

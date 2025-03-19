@@ -19,12 +19,10 @@ litters <- tbl(con,"litter") %>%
 feeding <- behaviour %>%
   collect() %>%
   dplyr::select(id, behaviour, date, detail, grid, mode, squirrel_id, time, locx, locy) %>%
-  collect() %>%
+  mutate(year = year(ymd(date))) %>%
   filter(behaviour == 1,  #feeding observations
          mode %in% c(1,3), #cas obs or focals
-         grid %in% c("KL", "SU", "CH")) %>% #only keep control grids
-  mutate(
-    year = year(ymd(date))) %>%
+         grid %in% c("KL", "SU", "CH", "BT") | (grid == "JO" & year >= 2013)) %>% #keep control grids and JO post-food-add (food-add = 2006-2012)
   na.omit()
 
 #we still need the sex of the squirrels here so let's connect to the flastall (first_last_all contains first last records of squirrels and is really handy for this type of stuff)... 
@@ -45,7 +43,7 @@ length(feeding$sex[is.na(feeding$sex) == TRUE])
 litters$fieldBDate <- as.Date(litters$fieldBDate)
 
 mating_lac <- litters %>%
-  filter(year(fieldBDate) >= 1987 & year(fieldBDate) <= 2023, ln ==1) %>% #first litters only
+  filter(year(fieldBDate) >= 1987 & year(fieldBDate) <= 2024, ln ==1) %>% #first litters only
   group_by(year = year(fieldBDate)) %>%
   summarise(
     earliest_birth_date = min(fieldBDate),
@@ -79,7 +77,8 @@ feeding <- feeding %>%
   filter(detail != "0" & detail != "") %>% #remove "other" and blank entries
   mutate(detail = as.character(detail)) %>% #convert to character to remove leading zeros
   mutate(detail = sub("^0", "", detail)) %>% #remove leading zeros
-  mutate(detail = as.numeric(detail)) #convert back to numeric
+  mutate(detail = as.numeric(detail)) %>% #convert back to numeric
+  filter(!is.na(detail)) #remove NAs
 
 #remove non-natural food sources
 feeding <- feeding %>%
@@ -123,6 +122,10 @@ feeding <- feeding %>%
       year %in% mast_years ~ "mast",
       year %in% (mast_years + 1) ~ "post-mast",
       TRUE ~ "non-mast"))
+
+#reorder columns
+feeding <- feeding %>%
+  dplyr::select(year, year_type, date, repro_stage, squirrel_id, sex, grid, locx, locy, detail, food_type)
 
 #save
 write.csv(feeding, "Input/allfeedingobs.csv", row.names = FALSE)

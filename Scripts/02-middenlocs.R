@@ -30,16 +30,18 @@ census <- census %>%
   mutate(census_date = as.Date(census_date))
 
 census_spring <- census %>%
+  mutate(year = year(ymd(census_date))) %>%
   filter(format(census_date, "%m-%d") == "05-15",
-         gr %in% c("KL", "SU", "CH")) %>%
+         gr %in% c("KL", "SU", "CH", "BT") | (gr == "JO" & year >= 2013)) %>%
   dplyr::select(census_date, gr, squirrel_id, locx, locy, reflo)
 
 census_middens <- census_middens %>%
   mutate(date = as.Date(date))
 
 census_middens_spring <- census_middens %>%
+  mutate(year = year(ymd(date))) %>%
   filter(format(date, "%m-%d") == "05-15",
-         grid %in% c("KL", "SU", "CH")) %>%
+         grid %in% c("KL", "SU", "CH", "BT") | (grid == "JO" & year >= 2013)) %>%
   dplyr::select(date, grid, squirrel_id, locX, locY, reflo)
 
 #remove rows where squirrel_id = NA - can't do anything with those
@@ -54,19 +56,30 @@ census_spring_missing_reflo <- census_spring %>%
 census_spring <- census_spring %>%
   mutate(reflo = case_when(
     is.na(reflo) & locx == "T.0" & locy == "1.0" ~ "T1",
+    is.na(reflo) & locx == "M.1" & locy == "1.8" ~ "M1.",
+    is.na(reflo) & locx == "L.3" & locy == "5.7" ~ "L5.",
+    is.na(reflo) & locx == "K.5" & locy == "7.5" ~ "K.7.",
     is.na(reflo) & locx == "J.5" & locy == "12" ~ "J.12",
+    is.na(reflo) & locx == "G.5" & locy == "1.0" ~ "G.1",
     is.na(reflo) & locx == "D.0" & locy == "7.0" ~ "D7",
     is.na(reflo) & locx == "C.5" & locy == "17.0" ~ "C.17",
     is.na(reflo) & locx == "C.5" & locy == "15.5" ~ "C.15.",
+    is.na(reflo) & locx == "C.0" & locy == "2.5" ~ "C2.",
     is.na(reflo) & locx == "B.5" & locy == "10.5" ~ "B.10.",
     is.na(reflo) & locx == "B.0" & locy == "2.0" ~ "B2",
     is.na(reflo) & locx == "A.5" & locy == "14.5" ~ "A.14.",
     is.na(reflo) & locx == "A.0" & locy == "10.5" ~ "A10.",
     is.na(reflo) & locx == "A.0" & locy == "3.5" ~ "A3.",
+    is.na(reflo) & locx == "8.0" & locy == "10.0" ~ "H10",
+    is.na(reflo) & locx == "7.5" & locy == "10.9" ~ "G.11",
+    is.na(reflo) & locx == "5.0" & locy == "15.0" ~ "E15",
     is.na(reflo) & locx == "21.5" & locy == "2.7" ~ "U.2.",
     is.na(reflo) & locx == "17.0" & locy == "8.0" ~ "Q8",
     is.na(reflo) & locx == "14.8" & locy == "6.6" ~ "N.6.",
+    is.na(reflo) & locx == "10.5" & locy == "15.5" ~ "J.15.",
     is.na(reflo) & locx == "1.0" & locy == "7.0" ~ "A7",
+    is.na(reflo) & locx == "1.0" & locy == "2.0" ~ "A2",
+    is.na(reflo) & locx == "1.0" & locy == "1.0" ~ "01",
     is.na(reflo) & locx == "0.0" & locy == "0.0" ~ "00",
     is.na(reflo) & locx == "0.0" & locy == "5.5" ~ "05.",
     is.na(reflo) & locx == "-8.5" & locy == "12.0" ~ "-8.12",
@@ -92,10 +105,27 @@ census_middens_spring_missing_reflo <- census_middens_spring %>%
 census_spring$reflo[census_spring$locx == "A.0" & census_spring$locy == 5.5 &
                        (is.na(census_spring$reflo) | census_spring$reflo == "")] <- "A5."
 
+census_spring$reflo[census_spring$locx == "K.5" & census_spring$locy == "8.0" &
+                      (is.na(census_spring$reflo) | census_spring$reflo == "")] <- "K.8"
+
+census_spring$reflo[census_spring$locx == "K.0" & census_spring$locy == 2.5 &
+                      (is.na(census_spring$reflo) | census_spring$reflo == "")] <- "K2."
+
+census_spring$reflo[census_spring$locx == "K.5" & census_spring$locy == "7.0" &
+                      (is.na(census_spring$reflo) | census_spring$reflo == "")] <- "K.7"
+
+census_spring$reflo[census_spring$locx == "0.0" & census_spring$locy == 1.5 &
+                      (is.na(census_spring$reflo) | census_spring$reflo == "")] <- "01."
+
+census_spring$reflo[census_spring$locx == "A.0" & census_spring$locy == 4.5 &
+                      (is.na(census_spring$reflo) | census_spring$reflo == "")] <- "A4."
+
+
 #weird reflos
 census_spring$reflo[census_spring$locx == "-0.4" & census_spring$locy == "13.6"] <- "-0.13."
 census_spring$reflo[census_spring$locx == "-0.5" & census_spring$locy == "5.5"] <- "-0.5."
 census_spring$reflo[census_spring$locx == "-1.2" & census_spring$locy == "14.5"] <- "-114."
+census_spring$reflo[census_spring$locx == "A.7" & census_spring$locy == "12.1"] <- "A.12."
 
 # create new locx/locy columns 2012-present --------------------------------------------
 #split into subtables
