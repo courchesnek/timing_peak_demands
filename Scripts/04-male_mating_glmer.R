@@ -57,11 +57,11 @@ model <- glmer(feeding_loc ~ 1 + (1 | squirrel_id) + (1 | year),
 #~1 means that the only fixed effect is the intercept - it represents the overall average log-odds of a feeding event being on the midden across all observations
 
 ##food type not that interesting, since most income comes from off midden anyways
-# model_food <- glmer(feeding_loc ~ food_type + (1 | squirrel_id) + (1 | year),
-#                          data = feeding_mating,
-#                          family = binomial)
-# 
-# anova(model, model_food)
+model_food <- glmer(feeding_loc ~ food_type + (1 | squirrel_id) + (1 | year),
+                         data = feeding_mating,
+                         family = binomial)
+
+anova(model, model_food)
 
 #check residuals
 sim_res <- simulateResiduals(model) #remember: with large sample sizes, even very small deviations can become significant
@@ -190,6 +190,11 @@ male_mating_model
 
 #save
 ggsave("Output/male_mating_model.jpeg", plot = male_mating_model, width = 12, height = 7)
+
+# data summary ------------------------------------------------------------
+male_feeding_summary <- male_feeding_detailed %>%
+  count(food_group, name = "sample_size")
+
 
 #compare prop of on vs off midden feeding events between the sexes ----------------
 feeding_proportions <- feeding_within_territory %>%
