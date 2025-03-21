@@ -3,6 +3,8 @@ source("Scripts/00-packages.R")
 
 #read in data --------------------------------------------------------
 feeding <- read.csv("Input/feeding_distances_all.csv")
+tree_cones <- read.csv("Input/tree_cones.csv")
+mushrooms <- read.csv("Input/mushrooms.csv")
 
 #filter for within territory
 feeding_within_territory <- feeding %>%
@@ -46,22 +48,37 @@ unique(feeding_mating$year)
 #make within_midden column numeric
 feeding_mating$feeding_loc <- as.numeric(feeding_mating$within_midden)
 
+#create detailed food groups -------------------------------------------
+male_feeding_detailed <- feeding_mating %>%
+  mutate(food_group = case_when(
+    detail == 2 ~ "cone",
+    detail == 4 ~ "mushroom/truffle",
+    detail == 3 ~ "spruce_bud",
+    TRUE ~ "other")) %>% # everything else = other
+  filter(!is.na(food_group))
 
-# model -------------------------------------------------------------------
+male_feeding_detailed$food_group <- factor(male_feeding_detailed$food_group)
+
+# combine cone and mushroom production indices and join to feeding data --------
+food_production <- mushrooms %>%
+  dplyr::select(-LowerCI, -UpperCI) %>%
+  left_join(tree_cones, by = "year") %>%
+  mutate(next_year = year + 1) %>%
+  rename(mushroom_index_previous = mushroom_index,
+         cone_index_previous = cone_index) %>%
+  mutate(
+    mushroom_index_previous_scaled = as.numeric(scale(mushroom_index_previous)),
+    cone_index_previous_scaled = as.numeric(scale(cone_index_previous)))
+
+male_feeding_detailed <- male_feeding_detailed %>%
+  left_join(food_production, by = c("year" = "next_year"))
+
+
+# glmer model -------------------------------------------------------------------
 # fit generalized linear mixed effects model with binary response
-model <- glmer(feeding_loc ~ 1 + (1 | squirrel_id) + (1 | year),
-               data = feeding_mating,
+model <- glmer(feeding_loc ~ food_group + cone_index_previous_scaled + mushroom_index_previous_scaled + (1 | squirrel_id) + (1 | year),
+               data = male_feeding_detailed,
                family = binomial(link = "logit"))
-
-#model with only an intercept as a fixed effect (plus random) = "null model"
-#~1 means that the only fixed effect is the intercept - it represents the overall average log-odds of a feeding event being on the midden across all observations
-
-##food type not that interesting, since most income comes from off midden anyways
-model_food <- glmer(feeding_loc ~ food_type + (1 | squirrel_id) + (1 | year),
-                         data = feeding_mating,
-                         family = binomial)
-
-anova(model, model_food)
 
 #check residuals
 sim_res <- simulateResiduals(model) #remember: with large sample sizes, even very small deviations can become significant
@@ -73,67 +90,51 @@ testOutliers(sim_res) #no significant outliers
 summary(model)
 
 # generate predictions and plot -------------------------------------------
-#step 1: generate predictions across all years
-pred_overall <- as.data.frame(emmeans(model, ~1, type = "response"))
+#step 1: generate predictions across all years - on-midden feeding
+pred_on_midden <- as.data.frame(emmeans(model, ~ food_group, type = "response"))
 
-#step 2: create detailed food groups
-male_feeding_detailed <- feeding_mating %>%
-  mutate(food_group = case_when(
-    #on-midden: only count if food is capital and the detail indicates cone or mushroom/truffle.
-    within_midden == TRUE & detail == 2 ~ "on_midden_cone",
-    within_midden == TRUE & detail == 4 ~ "on_midden_mushroom",
-    #if on-midden but with any other detail, we ignore (set to NA)
-    within_midden == TRUE & !(detail %in% c(2,4)) ~ NA_character_,
-    #off-midden: all events that are off the midden get classified by detail
-    within_midden == FALSE & detail == 2 ~ "off_midden_cone",
-    within_midden == FALSE & detail == 4 ~ "off_midden_mushroom",
-    within_midden == FALSE & detail == 1 ~ "off_midden_animal_material",
-    within_midden == FALSE & detail == 3 ~ "off_midden_spruce_bud",
-    within_midden == FALSE ~ "off_midden_other",
-    TRUE ~ NA_character_)) %>%
-  filter(!is.na(food_group))
+#step 1.5: generate predictions across all years - off-midden feeding
+pred_off_midden <- pred_on_midden
+pred_off_midden$prob <- 1 - pred_off_midden$prob
 
-
-#step 3: compute overall proportions within each broad category
+#step 2: compute overall proportions within each broad category
 on_summary <- male_feeding_detailed %>%
-  filter(grepl("on_midden", food_group)) %>%
+  filter(feeding_loc == 1) %>%
   group_by(food_group) %>%
   summarise(count = n(), .groups = "drop") %>%
   mutate(prop_detail = count / sum(count))
 
 off_summary <- male_feeding_detailed %>%
-  filter(grepl("off_midden", food_group)) %>%
+  filter(feeding_loc == 0) %>%
   group_by(food_group) %>%
   summarise(count = n(), .groups = "drop") %>%
   mutate(prop_detail = count / sum(count))
 
-#step 4: merge summaries with model predictions
+#step 3: merge summaries with model predictions
 #for on-midden events, multiply the detailed proportion by the predicted probability
 on_summary <- on_summary %>%
-  mutate(prob = pred_overall$prob,
-         final_prop = prop_detail * prob)
+  left_join(pred_on_midden, by = "food_group") %>%
+  mutate(final_prop = prop_detail * prob)
 
 #for off-midden events, use (1 - predicted probability)
 off_summary <- off_summary %>%
-  mutate(prob = pred_overall$prob,
-         final_prop = prop_detail * (1 - prob))
+  left_join(pred_off_midden, by = "food_group") %>%
+  mutate(final_prop = prop_detail * prob)
 
 #step 5: combine on- and off-midden summaries
-final_predicted <- bind_rows(on_summary, off_summary)
-
-#step 6: re-organize food groups into broader categories and add a variable for feeding location.
-final_predicted <- final_predicted %>%
+final_predicted <- bind_rows(
+  on_summary %>% mutate(food_group = paste0("on_midden_", food_group)),
+  off_summary %>% mutate(food_group = paste0("off_midden_", food_group))) %>%
   mutate(
     food_type_simple = case_when(
       food_group %in% c("on_midden_cone", "off_midden_cone") ~ "cone",
-      food_group %in% c("on_midden_mushroom", "off_midden_mushroom") ~ "mushroom/truffle",
-      food_group == "off_midden_spruce_bud" ~ "spruce_bud",
-      food_group == "off_midden_other" ~ "other",
-      TRUE ~ NA_character_),
+      food_group %in% c("on_midden_mushroom/truffle", "off_midden_mushroom/truffle") ~ "mushroom/truffle",
+      food_group %in% c("on_midden_spruce_bud", "off_midden_spruce_bud") ~ "spruce_bud",
+      food_group %in% c("on_midden_other", "off_midden_other") ~ "other"),
     midden_status = if_else(grepl("^on_midden", food_group), "on", "off")) %>%
-  #create an overall grouping variable for plotting since we're not splitting by year
-  mutate(Overall = "Overall") %>%
-  mutate(midden_status = factor(midden_status, levels = c("on", "off")))
+  mutate(
+    Overall = "Overall",
+    midden_status = factor(midden_status, levels = c("on", "off")))
 
 #step 7: plot stacked bar graph
 male_mating_model <- ggplot(final_predicted, 
@@ -190,6 +191,19 @@ male_mating_model
 
 #save
 ggsave("Output/male_mating_model.jpeg", plot = male_mating_model, width = 12, height = 7)
+
+#is the model predicted proportion of on-midden cone feeding significantly different from expectation of 90% on-midden cone feeding?
+expected_prob_on_midden_cone <- 0.90
+
+#calculate difference between expected and predicted
+on_midden_cone <- final_predicted %>%
+  filter(food_group == "on_midden_cone") %>%
+  mutate(difference = expected_prob_on_midden_cone - final_prop)
+
+#check if the 0.90 is outside the confidence interval for the predicted probability
+on_midden_cone <- on_midden_cone %>%
+  filter(food_group == "on_midden_cone") %>%
+  mutate(is_significant = asymp.LCL > expected_prob_on_midden_cone | asymp.UCL < expected_prob_on_midden_cone) 
 
 # data summary ------------------------------------------------------------
 male_feeding_summary <- male_feeding_detailed %>%

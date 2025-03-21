@@ -3,6 +3,8 @@ source("Scripts/00-packages.R")
 
 #read in data --------------------------------------------------------
 feeding <- read.csv("Input/feeding_distances_all.csv")
+tree_cones <- read.csv("Input/tree_cones.csv")
+mushrooms <- read.csv("Input/mushrooms.csv")
 
 #filter for within territory
 feeding_within_territory <- feeding %>%
@@ -49,43 +51,45 @@ feeding_mating$feeding_loc <- as.numeric(feeding_mating$within_midden)
 #create detailed food groups -------------------------------------------
 male_feeding_detailed <- feeding_mating %>%
   mutate(food_group = case_when(
-    #on-midden: only count if food is capital and the detail indicates cone or mushroom/truffle.
-    within_midden == TRUE & detail == 2 ~ "on_midden_cone",
-    within_midden == TRUE & detail == 4 ~ "on_midden_mushroom",
-    #if on-midden but with any other detail, we ignore (set to NA)
-    within_midden == TRUE & !(detail %in% c(2,4)) ~ NA_character_,
-    #off-midden: all events that are off the midden get classified by detail
-    within_midden == FALSE & detail == 2 ~ "off_midden_cone",
-    within_midden == FALSE & detail == 4 ~ "off_midden_mushroom",
-    within_midden == FALSE & detail == 3 ~ "off_midden_spruce_bud",
-    within_midden == FALSE ~ "off_midden_other",
-    TRUE ~ NA_character_)) %>%
+      detail == 2 ~ "cone",
+      detail == 4 ~ "mushroom/truffle",
+      detail == 3 ~ "spruce_bud",
+      TRUE ~ "other")) %>% # everything else = other
   filter(!is.na(food_group))
 
 male_feeding_detailed$food_group <- factor(male_feeding_detailed$food_group)
 
-#create a binary response for the model
+# combine cone and mushroom production indices and join to feeding data --------
+food_production <- mushrooms %>%
+  dplyr::select(-LowerCI, -UpperCI) %>%
+  left_join(tree_cones, by = "year") %>%
+  mutate(next_year = year + 1) %>%
+  rename(mushroom_index_previous = mushroom_index,
+         cone_index_previous = cone_index) %>%
+  mutate(
+    mushroom_index_previous_scaled = as.numeric(scale(mushroom_index_previous)),
+    cone_index_previous_scaled = as.numeric(scale(cone_index_previous)))
+
 male_feeding_detailed <- male_feeding_detailed %>%
-  mutate(feeding_loc_cone = ifelse(food_group == "on_midden_cone", 1, 0))
+  left_join(food_production, by = c("year" = "next_year"))
 
 # GEE model -------------------------------------------------------------------
-gee_model <- geeglm(feeding_loc_cone ~ 1, 
+gee_model <- geeglm(feeding_loc ~ food_group + cone_index_previous_scaled + mushroom_index_previous_scaled, 
                     id = squirrel_id, 
                     data = male_feeding_detailed,
                     family = binomial,
-                    corstr = "exchangeable") #assume equal correlation
+                    corstr = "exchangeable") #accounts for the correlation between repeated measures of the same ind squirrel
 
 summary(gee_model)
 
 #extract model-predicted probability
-pred_prob <- plogis(coef(gee_model)["(Intercept)"])
+pred_prob <- mean(predict(gee_model, type = "response"))
 cat("Model-predicted proportion of on_midden_cone:", pred_prob, "\n")
-#on average, 46.6% of male feeding events during mating involve on-midden cones
-#weak-moderate correlation (0.251) between repeated measures within each squirrel - meaning their feeding locations are not spatially independent
+#on average, 64.5% of male feeding events during mating involve on-midden cones
+#weak-moderate correlation (0.211) between repeated measures within each squirrel - meaning their feeding locations are not spatially independent
 ##some correlation makes sense since these are on-midden events, which is a small space so these locations are clustered
 
-
-#test whether on-midden cone feeding (~46.6%) significantly differs from expected range (90-100%)
+#test whether on-midden cone feeding (~64.5%) significantly differs from expected range (90-100%)
 #prediction: on-midden feeding = 90-100%
 
 #z-test - compare model predicted probabilty against hypothesized 0.90
@@ -96,7 +100,7 @@ intercept <- gee_model$coefficients[1]
 p_model <- plogis(intercept)
 
 #extract the number of clusters (observations) from the model
-n <- 400 #number of distinct groupings of repeated measurements (not the number of unique squirrels)
+n <- 410 #number of distinct groupings of repeated measurements (not the number of unique squirrels)
 
 #define the hypothesized proportion
 p_hypothesized <- 0.90
@@ -112,17 +116,14 @@ cat("Model-predicted proportion:", p_model, "\n")
 print(z_score)
 print(p_value, digits = 20) #p-value is very low, so we reject the hypothesis that the proportion of on-midden feeding is 90-100%
 
-
 # generate predictions and plot based on detailed food groups -------------------------------------------
 #computer overall proportions for each food type
 on_summary <- male_feeding_detailed %>%
-  filter(grepl("on_midden", food_group)) %>%
   group_by(food_group) %>%
   summarise(count = n(), .groups = "drop") %>%
   mutate(prop_detail = count / sum(count))
 
 off_summary <- male_feeding_detailed %>%
-  filter(grepl("off_midden", food_group)) %>%
   group_by(food_group) %>%
   summarise(count = n(), .groups = "drop") %>%
   mutate(prop_detail = count / sum(count))
@@ -137,17 +138,21 @@ off_summary <- off_summary %>%
          final_prop = prop_detail * (1 - prob))
 
 #combine data
-final_predicted <- bind_rows(on_summary, off_summary) %>%
+final_predicted <- bind_rows(
+  on_summary %>% mutate(food_group = paste0("on_midden_", food_group)),
+  off_summary %>% mutate(food_group = paste0("off_midden_", food_group))) %>%
   mutate(
     food_type_simple = case_when(
       food_group %in% c("on_midden_cone", "off_midden_cone") ~ "cone",
-      food_group %in% c("on_midden_mushroom", "off_midden_mushroom") ~ "mushroom/truffle",
+      food_group %in% c("on_midden_mushroom/truffle", "off_midden_mushroom/truffle") ~ "mushroom/truffle",
       food_group == "off_midden_spruce_bud" ~ "spruce_bud",
       food_group == "off_midden_other" ~ "other",
       TRUE ~ NA_character_),
     midden_status = if_else(grepl("^on_midden", food_group), "on", "off")) %>%
-  mutate(Overall = "Overall") %>%
-  mutate(midden_status = factor(midden_status, levels = c("on", "off")))
+  mutate(
+    Overall = "Overall",
+    midden_status = factor(midden_status, levels = c("on", "off"))) %>%
+  na.omit()
 
 #stacked bar graph
 male_mating_model <- ggplot(final_predicted, 
