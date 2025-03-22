@@ -211,8 +211,12 @@ calculate_stats <- function(df) {
 final_predicted_stats <- calculate_stats(final_predicted)
 
 # data summary ------------------------------------------------------------
-male_feeding_summary <- male_feeding_detailed %>%
-  count(food_group, name = "sample_size")
+summary_table <- male_feeding_detailed %>%
+  mutate(`Feeding location` = ifelse(midden_status == 1, "On-midden", "Off-midden")) %>%
+  group_by(`Feeding location`, food_group) %>%
+  summarise(`Sample size (n)` = n(), .groups = "drop") %>%
+  rename(`Food type` = food_group) %>%
+  dplyr::select(`Feeding location`, `Food type`, `Sample size (n)`)
 
 #compare prop of on vs off midden feeding events between the sexes ----------------
 feeding_proportions <- feeding_within_territory %>%
