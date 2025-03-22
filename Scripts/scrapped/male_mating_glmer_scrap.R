@@ -74,7 +74,7 @@ male_feeding_detailed <- male_feeding_detailed %>%
   left_join(food_production, by = c("year" = "next_year"))
 
 # glmer model -------------------------------------------------------------------
-# fit generalized linear mixed effects model with two-column binary response
+# fit generalized linear mixed effects model with binary response
 model <- glmer(midden_status ~ food_group + cone_index_previous_scaled + mushroom_index_previous_scaled + (1 | squirrel_id) + (1 | year),
                data = male_feeding_detailed,
                family = binomial(link = "logit"))
@@ -88,40 +88,39 @@ testOutliers(sim_res) #no significant outliers
 #model summary
 summary(model)
 
-# generate predictions and plot --------------------------------------------
-##note: model still only predicts for on-midden feeding, but off-midden feeding can be calculated as 1 - on-midden
-#step 1: generate model predictions (on‑midden probabilities) by food group
+# generate predictions and plot -------------------------------------------
+#step 1: generate predictions across all years - on-midden feeding
 pred_on_midden <- as.data.frame(emmeans(model, ~ food_group, type = "response"))
 
-#create off‑midden predictions as the complement
+#step 1.5: generate predictions across all years - off-midden feeding
 pred_off_midden <- pred_on_midden
 pred_off_midden$prob <- 1 - pred_off_midden$prob
 
-#step 2: compute observed overall proportions (from the aggregated data)
-#observed on‑midden counts by food group:
+#step 2: compute overall proportions within each broad category
 on_summary <- male_feeding_detailed %>%
   filter(midden_status == 1) %>%
   group_by(food_group) %>%
   summarise(count = n(), .groups = "drop") %>%
   mutate(prop_detail = count / sum(count))
 
-#observed off‑midden counts by food group:
 off_summary <- male_feeding_detailed %>%
   filter(midden_status == 0) %>%
   group_by(food_group) %>%
   summarise(count = n(), .groups = "drop") %>%
   mutate(prop_detail = count / sum(count))
 
-#step 3: merge observed summaries with model predictions
+#step 3: merge summaries with model predictions
+#for on-midden events, multiply the detailed proportion by the predicted probability
 on_summary <- on_summary %>%
   left_join(pred_on_midden, by = "food_group") %>%
   mutate(final_prop = prop_detail * prob)
 
+#for off-midden events, use (1 - predicted probability)
 off_summary <- off_summary %>%
   left_join(pred_off_midden, by = "food_group") %>%
   mutate(final_prop = prop_detail * prob)
 
-#step 4: combine on‑ and off‑midden summaries into one data frame
+#step 5: combine on- and off-midden summaries
 final_predicted <- bind_rows(
   on_summary %>% mutate(midden_status = "on"),
   off_summary %>% mutate(midden_status = "off")) %>%
@@ -133,7 +132,7 @@ final_predicted <- bind_rows(
 final_predicted$Overall <- factor(final_predicted$Overall, levels = "Overall")
 final_predicted$midden_status <- factor(final_predicted$midden_status, levels = c("on", "off"))
 
-#step 5: create the stacked bar plot with patterned aesthetics
+#step 7: plot stacked bar graph
 male_mating_model <- ggplot(final_predicted, 
                             aes(x = Overall, y = final_prop, 
                                 fill = food_group, pattern = midden_status)) +
@@ -143,7 +142,7 @@ male_mating_model <- ggplot(final_predicted,
                    pattern_angle = 45,
                    pattern_density = 0.1,
                    pattern_spacing = 0.02) +
-  scale_y_continuous(labels = percent_format(accuracy = 1), expand = c(0, 0)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
   scale_fill_manual(
     name = "Food Type",
     breaks = c("cone", "mushroom/truffle", "spruce_bud", "other"),
@@ -186,29 +185,50 @@ male_mating_model <- ggplot(final_predicted,
 
 male_mating_model
 
-# Save the plot
+#save
 ggsave("Output/male_mating_model.jpeg", plot = male_mating_model, width = 12, height = 7)
 
-#compare the predicted on‑midden proportion for cone feeding against an expected 90% ------------------
+#is the model predicted proportion of on-midden cone feeding significantly different from expectation of 90% on-midden cone feeding?
 expected_prob_on_midden_cone <- 0.90
 
+#calculate difference between expected and predicted
 on_midden_cone <- final_predicted %>%
-  filter(food_group == "cone", midden_status == "on") %>%
-  mutate(difference = expected_prob_on_midden_cone - final_prop,
-         is_significant = asymp.LCL > expected_prob_on_midden_cone | asymp.UCL < expected_prob_on_midden_cone)
+  filter(food_group == "on_midden_cone") %>%
+  mutate(difference = expected_prob_on_midden_cone - final_prop)
 
-on_midden_cone
+#check if the 0.90 is outside the confidence interval for the predicted probability
+on_midden_cone <- on_midden_cone %>%
+  filter(food_group == "on_midden_cone") %>%
+  mutate(is_significant = asymp.LCL > expected_prob_on_midden_cone | asymp.UCL < expected_prob_on_midden_cone) 
 
-#calculate additional statistics (e.g., confidence intervals) --------------------------
+# calculate stats for predictions -----------------------------------------
+#function to calculate min-max ranges and confidence intervals
 calculate_stats <- function(df) {
   df %>%
     mutate(
+      #calculate min/max ranges based on SE
       min_range = final_prop - SE,
       max_range = final_prop + SE,
+      
+      #calculate confidence intervals for final proportions
       lower_ci = final_prop - 1.96 * SE,
       upper_ci = final_prop + 1.96 * SE)}
 
 final_predicted_stats <- calculate_stats(final_predicted)
+
+# pairwise comparison -----------------------------------------------------
+#obtain the estimated marginal means on the link (logit) scale for each food group
+emm_link <- emmeans(model, ~ food_group, type = "link")
+
+# Test whether the estimates differ significantly from 0 (which corresponds to p = 0.5)
+test_results <- test(emm_link, null = 0)
+print(test_results)
+
+emm_overall <- emmeans(model, ~ 1, type = "link")
+test_overall <- test(emm_overall, null = 0)
+print(test_overall)
+
+
 
 # data summary ------------------------------------------------------------
 male_feeding_summary <- male_feeding_detailed %>%
@@ -245,3 +265,8 @@ feeding_proportions_plot
 
 #save
 ggsave("Output/feeding_proportions.jpeg", plot = feeding_proportions_plot, width = 12, height = 6)
+
+
+
+
+
