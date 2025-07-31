@@ -10,12 +10,6 @@ mushrooms <- read.csv("Input/mushrooms.csv")
 feeding_within_territory <- feeding %>%
   filter(within_territory == TRUE)
 
-# investigate sample sizes ------------------------------------------------
-feeding_numbers <- feeding_within_territory %>%
-  filter(repro_stage == "mating") %>%
-  group_by(year, sex) %>%
-  summarise(total_events = n(), .groups = "drop")
-
 # keep only years with earlier mating ---------------------------
 mating_lac <- read.csv("Input/reproductive_windows.csv")
 
@@ -26,18 +20,18 @@ mating_years <- mating_lac %>%
 
 mating_years
 
-# male on- vs off-midden feeding during mating -----------------------
-feeding_mating <- feeding_within_territory %>%
-  filter(sex == "M", repro_stage == "mating",
+# female on- vs off-midden feeding during lactation -----------------------
+feeding_lactation <- feeding_within_territory %>%
+  filter(sex == "F", repro_stage == "lactation",
          year %in% mating_years)
 
-length(unique(feeding_mating$squirrel_id))
+length(unique(feeding_lactation$squirrel_id))
 
-length(unique(feeding_mating$year))
-unique(feeding_mating$year)
+length(unique(feeding_lactation$year))
+unique(feeding_lactation$year)
 
 #create detailed food groups -------------------------------------------
-male_feeding_detailed <- feeding_mating %>%
+female_feeding_detailed <- feeding_lactation %>%
   mutate(food_group = case_when(
     detail == 2 ~ "cone",
     detail == 4 ~ "mushroom/truffle",
@@ -47,8 +41,8 @@ male_feeding_detailed <- feeding_mating %>%
   mutate(midden_status = ifelse(within_midden == TRUE, 1, 0))
 
 #ensure food_group is a factor
-male_feeding_detailed$food_group <- factor(male_feeding_detailed$food_group,
-                                           levels = c("cone", "mushroom/truffle", "spruce_bud", "other"))
+female_feeding_detailed$food_group <- factor(female_feeding_detailed$food_group,
+                                             levels = c("cone", "mushroom/truffle", "spruce_bud", "other"))
 
 # combine cone and mushroom production indices and join to feeding data --------
 food_production <- mushrooms %>%
@@ -61,25 +55,29 @@ food_production <- mushrooms %>%
     mushroom_index_previous_scaled = as.numeric(scale(mushroom_index_previous)),
     cone_index_previous_scaled = as.numeric(scale(cone_index_previous)))
 
-male_feeding_detailed <- male_feeding_detailed %>%
+female_feeding_detailed <- female_feeding_detailed %>%
   left_join(food_production, by = c("year" = "next_year"))
 
 # glmer model -------------------------------------------------------------------
 # fit generalized linear mixed effects model with two-column binary response
 model <- glmer(midden_status ~ food_group + cone_index_previous_scaled + mushroom_index_previous_scaled + (1 | squirrel_id) + (1 | year),
-               data = male_feeding_detailed,
+               data = female_feeding_detailed,
                family = binomial(link = "logit"))
 
 #check residuals
-sim_res <- simulateResiduals(model) #remember: with large sample sizes, even very small deviations can become significant
+sim_res <- simulateResiduals(model, n = 1000) #remember: with large sample sizes, even very small deviations can become significant
 plot(sim_res) 
 
-testOutliers(sim_res) #no significant outliers
+#test for overdispersion
+testDispersion(sim_res) #no overdispersion detected
+
+#outlier test with bootstrap
+testOutliers(sim_res, type = "bootstrap", n = 1000) #no significant outliers
 
 #model summary
 summary(model)
 
-# generate model-based predictions: probability of a feeding event being within each food type grouping  --------------------------------------------
+# generate predictions and plot --------------------------------------------
 ##note: model still only predicts for on-midden feeding, but off-midden feeding can be calculated as 1 - on-midden
 #step 1: generate model predictions (on‑midden probabilities) by food group
 pred_on_midden <- as.data.frame(emmeans(model, ~ food_group, type = "response"))
@@ -95,16 +93,17 @@ pred_off_midden <- pred_on_midden %>%
     asymp.LCL  = 1 - old_UCL,
     asymp.UCL  = 1 - old_LCL)
 
+
 #step 2: compute observed overall frequency of each (food_group and location)
 #observed on‑midden counts by food group:
-on_summary <- male_feeding_detailed %>%
+on_summary <- female_feeding_detailed %>%
   filter(midden_status == 1) %>%
   group_by(food_group) %>%
   summarise(count = n(), .groups = "drop") %>%
   mutate(prop_detail = count / sum(count))
 
 #observed off‑midden counts by food group:
-off_summary <- male_feeding_detailed %>%
+off_summary <- female_feeding_detailed %>%
   filter(midden_status == 0) %>%
   group_by(food_group) %>%
   summarise(count = n(), .groups = "drop") %>%
@@ -139,12 +138,12 @@ final_predicted$Overall <- factor(final_predicted$Overall, levels = "Overall")
 final_predicted$midden_status <- factor(final_predicted$midden_status, levels = c("on", "off"))
 
 #save as csv
-write.csv(final_predicted, "Output/final_weighted_predictions.csv", row.names = FALSE)
+write.csv(final_predicted, "Output/final_weighted_predictions_f.csv", row.names = FALSE)
 
-#step 5: create the stacked bar plot with patterned aesthetics - plotting predicted diet compositions
-male_mating_model <- ggplot(final_predicted, 
-                            aes(x = Overall, y = final_prop, 
-                                fill = food_group, pattern = midden_status)) +
+#step 5: create the stacked bar plot with patterned aesthetics
+female_lactation_model <- ggplot(final_predicted, 
+                              aes(x = Overall, y = final_prop, 
+                                  fill = food_group, pattern = midden_status)) +
   geom_bar_pattern(stat = "identity", position = "stack",
                    color = "black",              
                    pattern_fill = "black",
@@ -176,7 +175,7 @@ male_mating_model <- ggplot(final_predicted,
     pattern = guide_legend(override.aes = list(fill = "white"), order = 2)) +
   labs(x = NULL,
        y = "Proportion of Feeding Events",
-       title = "Proportion of Food Types Consumed\nby Males During Mating",
+       title = "Proportion of Food Types Consumed\nby Females During Lactation",
        fill = "Food Type") +
   theme_minimal(base_size = 23) +
   theme(
@@ -192,57 +191,44 @@ male_mating_model <- ggplot(final_predicted,
     axis.text.x = element_blank(),
     axis.text.y = element_text(color = "black"))
 
-male_mating_model
+female_lactation_model
 
 # Save the plot
-ggsave("Output/male_mating_model.jpeg", plot = male_mating_model, width = 12, height = 7)
+ggsave("Output/female_lactation_model.jpeg", plot = female_lactation_model, width = 12, height = 7)
 
 # statistical check against predictions: one-sided significant test -----------------------------------
-#1) During mating, the proportion of male feeding events on 
-#     cached cones (on-midden) will exceed 90%. 
-cone_on <- final_predicted %>% 
-  filter(food_group == "cone", midden_status == "on")
-cone_on
+#1) During lactation, the proportion of female feeding events on mushrooms, spruce buds and 
+#     other non-cone foods off-midden will exceed 50%.
+off_noncones <- final_predicted %>%
+  filter(midden_status == "off",
+         food_group %in% c("mushroom/truffle","spruce_bud","other")) %>%
+  summarize(
+    prop        = sum(final_prop),
+    # approximate variance from the CIs
+    var         = sum(((CI_upper - CI_lower)/(2*1.96))^2)) %>%
+  mutate(
+    se          = sqrt(var),
+    lower_bound = prop - 1.96*se,
+    meets_50    = lower_bound > 0.50)
+# check if the lower CI is above 0.50
+# ANSWER = FALSE - the lower CI is 0.303, which does not meet the 50% threshold
 
-# check if the lower CI is above 0.90
-cone_on_meets <- cone_on$asymp.LCL > 0.90
-# ANSWER = FALSE - the lower CI is 0.46, which does not meet the 90% threshold
+#2) During lactation, the proportion of female feeding events on scattered cones (off-midden) 
+#     will exceed that on cached cones (on-midden). 
+cone_on  <- final_predicted %>% 
+              filter(food_group == "cone",  midden_status == "on")
+cone_off <- final_predicted %>% 
+              filter(food_group == "cone",  midden_status == "off")
 
-#2) During mating, the combined proportion of male feeding events on mushrooms, 
-#     spruce buds and other non-cone foods off-midden will be less than 10%.
-non_cones_off <- final_predicted %>%
-  filter(food_group %in% c("mushroom/truffle","spruce_bud","other"),
-         midden_status == "off")
-
-combined_prop <- sum(non_cones_off$final_prop)
-combined_SE   <- sqrt(sum(non_cones_off$SE^2))
-combined_LCL  <- combined_prop - 1.96 * combined_SE
-combined_UCL  <- combined_prop + 1.96 * combined_SE
-
-tibble(
-  combined_prop,
-  combined_LCL,
-  combined_UCL,
-  meets    = combined_UCL < 0.10)
-# ANSWER = FALSE - the combined proportion is 0.170 (or 17%), and the combined 
-#   upper CI is 0.710, which is well above the 10% threshold
-
-#3) During mating, the proportion of male feeding events on cones off-midden 
-#     will be below 5%, reflecting snow-limited access.
-cone_off <- final_predicted %>%
-  filter(food_group == "cone", midden_status == "off")
-
-# inspect predicted proportion and its 95% CI
-cone_off$final_prop   
-cone_off$asymp.LCL   
-cone_off$asymp.UCL
+cone_on_upper  <- cone_on  %>% pull(CI_upper)
+cone_off_lower <- cone_off %>% pull(CI_lower)
 
 # test
-cone_off$asymp.UCL < 0.05
-# ANSWER = FALSE - the upper CI is 0.537, which is well above 0.05
+cone_off_lower > cone_on_upper
+# ANSWER = FALSE - the off-midden cone CI lower bound does not exceed the on-midden cone CI upper bound
 
 # data summary ------------------------------------------------------------
-summary_table <- male_feeding_detailed %>%
+summary_table <- female_feeding_detailed %>%
   mutate(`Feeding location` = ifelse(midden_status == 1, "On-midden", "Off-midden")) %>%
   group_by(`Feeding location`, food_group) %>%
   summarise(`Sample size (n)` = n(), .groups = "drop") %>%
