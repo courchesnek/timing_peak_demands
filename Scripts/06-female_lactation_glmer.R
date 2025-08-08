@@ -58,6 +58,9 @@ food_production <- mushrooms %>%
 female_feeding_detailed <- female_feeding_detailed %>%
   left_join(food_production, by = c("year" = "next_year"))
 
+#save
+write.csv(female_feeding_detailed, "Output/female_feeding_detailed.csv", row.names = FALSE)
+
 # glmer model -------------------------------------------------------------------
 # fit generalized linear mixed effects model with two-column binary response
 model <- glmer(midden_status ~ food_group + cone_index_previous_scaled + mushroom_index_previous_scaled + (1 | squirrel_id) + (1 | year),

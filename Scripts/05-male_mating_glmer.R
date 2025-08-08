@@ -64,6 +64,9 @@ food_production <- mushrooms %>%
 male_feeding_detailed <- male_feeding_detailed %>%
   left_join(food_production, by = c("year" = "next_year"))
 
+#save
+write.csv(male_feeding_detailed, "Output/male_feeding_detailed.csv", row.names = FALSE)
+
 # glmer model -------------------------------------------------------------------
 # fit generalized linear mixed effects model with two-column binary response
 model <- glmer(midden_status ~ food_group + cone_index_previous_scaled + mushroom_index_previous_scaled + (1 | squirrel_id) + (1 | year),
@@ -139,7 +142,7 @@ final_predicted$Overall <- factor(final_predicted$Overall, levels = "Overall")
 final_predicted$midden_status <- factor(final_predicted$midden_status, levels = c("on", "off"))
 
 #save as csv
-write.csv(final_predicted, "Output/final_weighted_predictions.csv", row.names = FALSE)
+write.csv(final_predicted, "Output/final_weighted_predictions_m.csv", row.names = FALSE)
 
 #step 5: create the stacked bar plot with patterned aesthetics - plotting predicted diet compositions
 male_mating_model <- ggplot(final_predicted, 
