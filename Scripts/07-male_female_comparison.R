@@ -97,4 +97,27 @@ cat("Total off-midden share difference (F - M):\n",
     sprintf("  95%% bootstrap CI: [%.3f, %.3f]\n", ci_off[1], ci_off[2]),
     sprintf("  one-sided p = %.3f  (H1: female > male)\n", p_off))
 
+# 6) mean point estimates
+est_on  <- mean(boot_df$diff_on)   # female − male, on-midden cones
+est_off <- mean(boot_df$diff_off)  # female − male, off-midden (any)
+
+# 7) convert everything to percentage points
+on_pp   <- 100 * est_on
+off_pp  <- 100 * est_off
+ci_on_pp  <- 100 * ci_on
+ci_off_pp <- 100 * ci_off
+
+fmt_p <- function(p) if (p < 0.001) "< 0.001" else sprintf("%.3f", p)
+
+# 8) build a results table
+results <- data.frame(
+  Comparison          = c("On-midden cone feeding", "Off-midden feeding (any)"),
+  `Direction (F − M)` = c(ifelse(on_pp < 0, "Lower", "Higher"),
+                          ifelse(off_pp < 0, "Lower", "Higher")),
+  `Δ proportion (pp)` = c(sprintf("%.1f", on_pp), sprintf("%.1f", off_pp)),
+  `95% CI (pp)`       = c(sprintf("%.1f – %.1f", ci_on_pp[1],  ci_on_pp[2]),
+                          sprintf("%.1f – %.1f", ci_off_pp[1], ci_off_pp[2])),
+  `One-sided p`       = c(fmt_p(p_on), fmt_p(p_off)),
+  check.names = FALSE)
+
 
