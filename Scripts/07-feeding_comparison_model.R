@@ -191,7 +191,16 @@ summary(emm)
 ## but instead, "55.9% of cone feedings are on-midden for males during mating"
 ### this is telling me the probability of the proportion of food events of a food group occurring on- vs off-midden
 
+# data summary ------------------------------------------------------------
+summary_table <- feeding_detailed %>%
+  mutate(`Feeding location` = ifelse(midden_status == 1, "On-midden", "Off-midden"),
+         Sex = ifelse(sex == "M", "Male", "Female")) %>%
+  group_by(Sex, `Feeding location`, food_group) %>%
+  summarise(`Sample size (n)` = n(), .groups = "drop") %>%
+  rename(`Food type` = food_group) %>%
+  dplyr::select(Sex, `Feeding location`, `Food type`, `Sample size (n)`)
 
-
-
-
+length(unique(feeding_detailed$squirrel_id))
+length(unique(feeding_detailed$squirrel_id[feeding_detailed$sex == "M"]))
+length(unique(feeding_detailed$squirrel_id[feeding_detailed$sex == "F"]))
+length(unique(feeding_detailed$year))

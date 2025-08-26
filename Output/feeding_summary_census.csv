@@ -48,7 +48,7 @@
 "1997","M","non-breeding","capital",0
 "1997","M","non-breeding","income",0
 "1999","F","lactation","capital",12
-"1999","F","lactation","income",40
+"1999","F","lactation","income",32
 "1999","F","mating","capital",55
 "1999","F","mating","income",19
 "1999","F","non-breeding","capital",0
@@ -72,7 +72,7 @@
 "2000","M","non-breeding","capital",2
 "2000","M","non-breeding","income",0
 "2001","F","lactation","capital",42
-"2001","F","lactation","income",52
+"2001","F","lactation","income",51
 "2001","F","mating","capital",1
 "2001","F","mating","income",1
 "2001","F","non-breeding","capital",0
@@ -84,7 +84,7 @@
 "2001","M","non-breeding","capital",0
 "2001","M","non-breeding","income",0
 "2002","F","lactation","capital",49
-"2002","F","lactation","income",706
+"2002","F","lactation","income",705
 "2002","F","mating","capital",8
 "2002","F","mating","income",3
 "2002","F","non-breeding","capital",0
@@ -206,7 +206,7 @@
 "2012","F","lactation","capital",29
 "2012","F","lactation","income",40
 "2012","F","mating","capital",21
-"2012","F","mating","income",12
+"2012","F","mating","income",11
 "2012","F","non-breeding","capital",0
 "2012","F","non-breeding","income",1
 "2012","M","lactation","capital",24
@@ -252,13 +252,13 @@
 "2015","M","non-breeding","capital",174
 "2015","M","non-breeding","income",212
 "2016","F","lactation","capital",114
-"2016","F","lactation","income",498
+"2016","F","lactation","income",497
 "2016","F","mating","capital",27
 "2016","F","mating","income",7
 "2016","F","non-breeding","capital",6
 "2016","F","non-breeding","income",189
 "2016","M","lactation","capital",471
-"2016","M","lactation","income",2276
+"2016","M","lactation","income",2273
 "2016","M","mating","capital",11
 "2016","M","mating","income",2
 "2016","M","non-breeding","capital",22
@@ -276,7 +276,7 @@
 "2017","M","non-breeding","capital",0
 "2017","M","non-breeding","income",2
 "2018","F","lactation","capital",54
-"2018","F","lactation","income",143
+"2018","F","lactation","income",142
 "2018","F","mating","capital",16
 "2018","F","mating","income",8
 "2018","F","non-breeding","capital",1
