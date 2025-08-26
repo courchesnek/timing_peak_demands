@@ -22,7 +22,7 @@ feeding <- behaviour %>%
   mutate(year = year(ymd(date))) %>%
   filter(behaviour == 1,  #feeding observations
          mode %in% c(1,3), #cas obs or focals
-         grid %in% c("KL", "SU", "CH", "BT") | (grid == "JO" & year >= 2013)) %>% #keep control grids and JO post-food-add (food-add = 2006-2012)
+         grid %in% c("KL", "SU", "CH")) %>% #keep control grids
   na.omit()
 
 #we still need the sex of the squirrels here so let's connect to the flastall (first_last_all contains first last records of squirrels and is really handy for this type of stuff)... 
@@ -86,46 +86,20 @@ feeding <- feeding %>%
 
 #group food types for comparisons
 income <- c(1, 3, 5, 6, 7, 8, 9, 11, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 27, 28, 29, 31, 32) #income = all other natural resources found fresh on the landscape
-capital <- c(2,4) #capital = old cones and mushrooms/truffle
+capital <- 2 #capital = old cones
+#not including cached mushrooms here, since it doesn't fit in either category (don't want to conflate cached cones with cached mushrooms)
 
 feeding <- feeding %>%
   mutate(food_type = ifelse(detail %in% income, "income", 
                             ifelse(detail %in% capital, "capital", NA))) %>%
   filter(!is.na(food_type))
 
-#create a column for snow cover
-# feeding <- feeding %>%
-#   mutate(
-#     snow = case_when(
-#       #snow period: October 15 to May 14
-#       (month(date) %in% c(11, 12, 1, 2, 3, 4) | 
-#          (month(date) == 10 & day(date) >= 15) | 
-#          (month(date) == 5 & day(date) <= 14)) ~ "snow",
-#       
-#       #no-snow period: May 15 to October 14
-#       (month(date) %in% c(6, 7, 8, 9) | 
-#          (month(date) == 10 & day(date) <= 14) | 
-#          (month(date) == 5 & day(date) >= 15)) ~ "no snow",
-#       
-#       #default: this should never trigger if the above cases are correct
-#       TRUE ~ "error"))
-
-#add year type column
-##define mast years
-mast_years <- c(1993, 1998, 2005, 2010, 2014, 2019, 2022)
-
-#add a column for year_type
-feeding <- feeding %>%
-  mutate(
-    year = as.numeric(format(as.Date(date, format = "%Y-%m-%d"), "%Y")), #extract year from date
-    year_type = case_when(
-      year %in% mast_years ~ "mast",
-      year %in% (mast_years + 1) ~ "post-mast",
-      TRUE ~ "non-mast"))
+#make year column from date
+feeding$year <- year(ymd(feeding$date))
 
 #reorder columns
 feeding <- feeding %>%
-  dplyr::select(year, year_type, date, repro_stage, squirrel_id, sex, grid, locx, locy, detail, food_type)
+  dplyr::select(year, date, repro_stage, squirrel_id, sex, grid, locx, locy, detail, food_type)
 
 #save
 write.csv(feeding, "Input/allfeedingobs.csv", row.names = FALSE)

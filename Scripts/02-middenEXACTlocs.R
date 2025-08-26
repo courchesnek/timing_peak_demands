@@ -1,33 +1,48 @@
-#load packages
+#load packages -----
 source("Scripts/00-packages.R")
 
-#connection to KRSP database
+#connection to KRSP database --------
 con <- krsp_connect (host = "krsp.cepb5cjvqban.us-east-2.rds.amazonaws.com",
                      dbname ="krsp",
                      username = Sys.getenv("krsp_user"),
                      password = Sys.getenv("krsp_password"))
 
-#pull in squirrel census and midden table
+#pull in squirrel census and midden table ------
 census_squirrels <- tbl(con,"census") %>%
   collect()
 
 census_middens <- tbl(con, "dbamidden") %>%
   collect()
 
-#grids of interest
-grids <- c("KL","SU","CH","BT","JO")
+#grids of interest ------
+grids <- c("KL","SU","CH")
 
 # get one exact loc set for each unique reflo -----------------------------
-#first, retain only relevant columns from census tables and join them into one table
+##1) squirrel census: 2012 - present (keep only primary middens, different fates per year)
 squirrels <- census_squirrels %>%
-  dplyr::select(gr, census_date, reflo, locx, locy, squirrel_id) %>%
+  dplyr::select(gr, census_date, sq_fate, reflo, locx, locy, squirrel_id) %>%
   rename(grid = gr)
 
+squirrels <- squirrels %>%
+  mutate(census_date = as.Date(census_date),
+         year = year(census_date),
+         month = month(census_date)) %>%
+  filter((year >= 2012 & year <= 2014 & sq_fate %in% c(1, 2)) |
+           ((year == 2015 | (year == 2016 & month <= 6)) & sq_fate %in% c(1, 2, 10, 13)) |
+           (year == 2016 & month == 8 & sq_fate %in% c(1, 3, 4, 6, 10)) |
+           (year >= 2017 & year <= 2021 & sq_fate %in% c(1, 2, 15, 16, 18)) |
+           (year >= 2022 & year <= 2024 & sq_fate == 21)) %>%
+  dplyr::select(-sq_fate, -year, -month)
+
 middens <- census_middens %>%
-  dplyr::select(grid, date, reflo, locX, locY, squirrel_id) %>%
+  dplyr::select(grid, date, reflo, locX, locY, squirrel_id, def) %>%
+  mutate(def = as.numeric(as.character(def))) %>%
+  filter(def == 4) %>% #only keep primary middens (def column = 4)
   rename(census_date = date,
          locx = locX,
-         locy = locY)
+         locy = locY) %>%
+  dplyr::select(-def) %>%
+  mutate(census_date = as.Date(census_date))
 
 census_master <- bind_rows(squirrels, middens)
 
@@ -37,8 +52,7 @@ census_exactlocs <- census_master %>%
     census_date = as.Date(census_date),
     year        = year(census_date)) %>%
   filter(grid %in% grids,
-         year <= 2020, #every grid through 2020 (when exact locs were last used in census)
-         !(grid == "JO" & year < 2013)) %>% #drop JO before 2013 (avoid food add)
+         year <= 2020) %>% #every grid through 2020 (when exact locs were last used in census)
   dplyr::select(-year)
 
 #numeric locx to letters
@@ -195,8 +209,7 @@ squirrel_census <- census_master %>%
   mutate(census_date = as.Date(census_date),
          year        = year(census_date)) %>%
   filter(grid %in% grids,
-         format(census_date, "%m-%d") == "05-15",
-         !(grid == "JO" & year < 2013)) %>%
+         format(census_date, "%m-%d") == "05-15") %>%
   dplyr::select(-locx, -locy)
 
 squirrel_census <- squirrel_census %>%
@@ -209,9 +222,13 @@ squirrel_census <- squirrel_census %>%
   dplyr::select(grid, census_date, year, reflo, locx, locy, squirrel_id) %>%
   na.omit()
 
+#remove secondary middens - keep only midden that appears most often for each squirrel across years ---------
+census_counts <- squirrel_census %>%
+  group_by(squirrel_id, year) %>%
+  summarise(n_middens = n(), .groups = "drop")
+
 #save the final census table
 write.csv(squirrel_census, "Output/squirrel_census_exact_locs.csv", row.names = FALSE)
-
 
 # add census locs to feeding obs ------------------------------------------
 #pull in feeding obs table
@@ -241,4 +258,3 @@ feeding_summary_census <- all_feeding_census %>%
 
 #save
 write.csv(feeding_summary_census, "Output/feeding_summary_census.csv", row.names = FALSE)
-

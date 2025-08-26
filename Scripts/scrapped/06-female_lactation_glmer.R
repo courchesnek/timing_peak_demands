@@ -153,41 +153,47 @@ female_lactation_model <- ggplot(final_predicted,
                    pattern_angle = 45,
                    pattern_density = 0.1,
                    pattern_spacing = 0.02) +
-  scale_y_continuous(labels = percent_format(accuracy = 1), expand = c(0, 0)) +
+  scale_x_discrete(expand = expansion(add = c(0.6, 0.6))) +
+  scale_y_continuous(limits = c(0, 1.10),
+                     breaks = c(0, 0.25, 0.50, 0.75, 1.00),
+                     labels = percent_format(accuracy = 1),
+                     expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0, 1.06), clip = "off") +
   scale_fill_manual(
-    name = "Food Type",
+    name = "Food type",
     breaks = c("cone", "mushroom/truffle", "spruce_bud", "other"),
     values = c(
       "cone" = "#E69F00",
       "mushroom/truffle" = "#56B4E9",
-      "spruce_bud" = "#359B73",
-      "other" = "#F748A5"),
+      "spruce_bud" = "#009E73",
+      "other" = "#CC79A7"),
     labels = c(
       "cone" = "Cone", 
-      "mushroom/truffle" = "Mushroom/Truffle", 
-      "spruce_bud" = "Spruce Bud", 
+      "mushroom/truffle" = "Mushroom/truffle", 
+      "spruce_bud" = "Spruce bud", 
       "other" = "Other"),
     guide = guide_legend(override.aes = list(pattern = "none"))) +
   scale_pattern_manual(
-    name = "Feeding Location",
+    name = "Feeding location",
     breaks = c("on", "off"),
     values = c("on" = "none", "off" = "stripe"),
-    labels = c("on" = "On Midden", "off" = "Off Midden")) +
+    labels = c("on" = "On-midden", "off" = "Off-midden")) +
   guides(
     fill = guide_legend(override.aes = list(pattern = "none"), order = 1),
     pattern = guide_legend(override.aes = list(fill = "white"), order = 2)) +
   labs(x = NULL,
-       y = "Proportion of Feeding Events",
-       title = "Proportion of Food Types Consumed\nby Females During Lactation",
-       fill = "Food Type") +
-  theme_minimal(base_size = 23) +
+       y = "Proportion of total feeding events",
+       title = "Female Diet Composition During Lactation",
+       fill = "Food type") +
+  theme_minimal(base_size = 22) +
   theme(
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.75),
-    panel.grid = element_blank(),
-    plot.title = element_text(size = 30, hjust = 0.5, face = "bold", margin = margin(b = 10, unit = "pt")),
-    legend.title = element_text(size = 25, face = "bold"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y  = element_line(color = "grey90"),
+    plot.title = element_text(size = 26, hjust = 0.5, face = "bold", margin = margin(b = 20, unit = "pt")),
+    legend.title = element_text(size = 23, face = "bold"),
     legend.text = element_text(size = 20),
-    legend.spacing.y = unit(2, "cm"),
+    legend.spacing.y = unit(1, "cm"),
     legend.key.height = unit(1.4, "cm"),
     plot.margin = margin(t = 25, r = 20, b = 20, l = 10),
     legend.box.margin = margin(t = 0, r = 10, b = 0, l = -10),
@@ -237,3 +243,19 @@ summary_table <- female_feeding_detailed %>%
   summarise(`Sample size (n)` = n(), .groups = "drop") %>%
   rename(`Food type` = food_group) %>%
   dplyr::select(`Feeding location`, `Food type`, `Sample size (n)`)
+
+length(unique(feeding_lactation$squirrel_id))
+length(unique(feeding_lactation$year))
+length(unique(feeding_lactation$grid))
+
+
+# female off-midden feeding -----------------------------------------------
+off_total <- final_predicted %>%
+  filter(midden_status == "off") %>%
+  summarise(
+    prop = sum(final_prop),
+    var  = sum(((CI_upper - CI_lower)/(2*1.96))^2)) %>%
+  mutate(se = sqrt(var),
+         lower = prop - 1.96*se,
+         upper = prop + 1.96*se)
+
