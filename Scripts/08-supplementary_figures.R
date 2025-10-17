@@ -11,7 +11,7 @@ feeding <- feeding %>%
 
 #filter out unnecessary columns
 feeding <- feeding %>%
-  dplyr::select(-locx_obs, -locy_obs, -snow, -locx_census, -locy_census)
+  dplyr::select(-locx_obs, -locy_obs, -locx_census, -locy_census)
 
 #how many ind squirrels?
 length(unique(feeding$squirrel_id)) #628 individual squirrels
@@ -66,6 +66,7 @@ DEE_summary <- feeding %>%
     n_events = n())
 
 # calculate proportions ---------------------------------------------------
+#how much of the DEE budget is coming from cached vs. fresh food?
 feeding_proportions <- feeding %>%
   group_by(sex, season, food_type) %>% #group by sex, season, and food type
   summarise(
@@ -91,28 +92,33 @@ feeding_proportions <- feeding_proportions %>%
 energetics <- ggplot(feeding_proportions, aes(x = season, y = proportion_DEE, fill = sex)) +
   geom_bar(stat = "identity", position = "dodge", color = "black", width = 0.7) +
   facet_wrap(~food_type, scales = "fixed",
-             labeller = labeller(food_type = c("capital" = "Cached", "income" = "Fresh"))) +
+             labeller = labeller(food_type = c("capital" = "Capital (Cached)", "income" = "Income (Fresh)"))) +
   labs(
-    title = "Energy Input from Cached vs. Fresh Food to Meet Daily Energy Requirements by Sex and Season",
     x = "Season",
     y = "Daily Energy Expenditure (kJ/day)",
     fill = "Sex") +
   scale_fill_manual(
-    values = c("F" = "#FF99CC", "M" = "#99CCFF"),
+    values = c("F" = "#CC6677", "M" = "#88CCEE"),
     labels = c("Female", "Male")) +
   scale_x_discrete(
     labels = c("winter" = "Winter", 
                "mating" = "Mating", 
                "lactation" = "Lactation",
                "non-breeding" = "Non-breeding")) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) + 
   theme_minimal() +
-  theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-    axis.title = element_text(size = 14),
-    axis.text = element_text(size = 12),
-    legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12),
-    strip.text = element_text(size = 14, face = "bold"))
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1.0),
+    legend.position = "bottom",
+    axis.title.x = element_text(size = 20, margin = margin(t = 15, b = -5)),
+    axis.title.y = element_text(size = 20, margin = margin(r = 15, l = 10)),
+    axis.text = element_text(size = 16, color = "black"),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 18),
+    strip.text = element_text(size = 22, face = "bold", margin = margin(b = 10, t = 10)),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.y = element_line(color = "grey80"),
+    panel.grid.minor.y = element_blank())
 
 energetics
 

@@ -157,7 +157,7 @@ feeding_comparison <- ggplot(final_predicted,
     fill = guide_legend(override.aes = list(pattern = "none"), order = 1),
     pattern = guide_legend(override.aes = list(fill = "white"), order = 2)) +
   scale_fill_manual(values = c("cone" = "#E69F00", "other" = "#009E73"),
-                    labels = c("cone" = "Cone", "other" = "Other")) +
+                    labels = c("cone" = "Spruce Cone Seed", "other" = "Non-seed")) +
   labs(x = NULL, y = "Proportion of total feeding events",
        fill = "Food Type", pattern = "Feeding Location") +
   theme_minimal(base_size = 22) +
