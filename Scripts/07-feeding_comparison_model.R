@@ -114,11 +114,6 @@ final_predicted <- bind_rows(on_summary, off_summary) %>%
     midden_status = factor(midden_status, levels = c("on", "off")),
     sex = factor(sex, levels = c("M", "F")),
     Overall = ifelse(sex == "M", "Male: Mating", "Female: Lactation")) %>%
-  group_by(Overall) %>%
-  mutate(
-    final_prop = count / sum(count),  # REPLACE existing final_prop
-    across(.cols = c(prob, SE, df, CI_lower, CI_upper, final_prop),
-           .fns = ~ round(.x, 4))) %>%
   ungroup() %>%
   dplyr::select(Overall, midden_status, sex, food_group, count, prop_detail,
                 prob, SE, df, CI_lower, CI_upper, final_prop)
@@ -128,58 +123,67 @@ final_predicted$midden_status <- factor(final_predicted$midden_status, levels = 
 #save as csv
 write.csv(final_predicted, "Output/final_weighted_predictions.csv", row.names = FALSE)
 
-# create the stacked bar plot with patterned aesthetics - plotting predicted diet compositions --------------------------------------------------------------------
-final_predicted <- final_predicted %>%
-  mutate(group = case_when(
-    sex == "M" ~ "Male: Mating",
-    sex == "F" ~ "Female: Lactation"))
+# create the bar plot with patterned aesthetics - plotting predicted diet compositions -------------------------------------------------------------------
+#adjust factor order so male comes first
+final_predicted$Overall <- factor(final_predicted$Overall,
+                                  levels = c("Male: Mating", "Female: Lactation"))
 
-final_predicted$group <- factor(final_predicted$group,
-                                levels = c("Male: Mating", "Female: Lactation"))
+pos <- position_dodge(width = 0.72)
 
-feeding_comparison <- ggplot(final_predicted, 
-      aes(x = "", y = final_prop, fill = food_group, pattern = midden_status)) +
-  geom_bar_pattern(stat = "identity", 
-                   position = "stack",
-                   colour = "black",
-                   pattern_fill = "black",
-                   pattern_angle = 45,
-                   pattern_density = 0.1,
-                   pattern_spacing = 0.02) +
-  facet_wrap(~ group, nrow = 1) +
-  scale_y_continuous(limits = c(0, 1.10),
-                     breaks = c(0, 0.25, 0.50, 0.75, 1.00),
-                     labels = percent_format(accuracy = 1),
-                     expand = c(0, 0)) +
-  scale_pattern_manual(values = c("on" = "none", "off" = "stripe"),
-                       labels = c("on" = "On-midden", "off" = "Off-midden")) +
+feeding_comparison <- ggplot(
+  final_predicted,
+  aes(x = food_group, y = final_prop,
+      fill = food_group, pattern = midden_status, group = midden_status)) +
+  geom_col_pattern(
+    position = pos, width = 0.62,
+    colour = "black",
+    pattern_fill = "black",
+    pattern_angle = 45,
+    pattern_density = 0.12,
+    pattern_spacing = 0.02) +
+  geom_errorbar(
+    aes(ymin = CI_lower, ymax = CI_upper),
+    position = pos, width = 0.12, linewidth = 0.9) +
+  facet_wrap(~ Overall, nrow = 1) +
+  scale_x_discrete(expand = expansion(mult = c(0.4, 0.4))) +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    expand = c(0, 0), limits = c(0, 1.05)) +
+  scale_fill_manual(
+    values = c("cone" = "#E69F00", "other" = "#009E73"),
+    labels = c("Spruce Cone Seed", "Non-seed"),
+    name = "Food Type") +
+  scale_pattern_manual(
+    values = c("on" = "none", "off" = "stripe"),
+    labels = c("On-midden", "Off-midden"),
+    name = "Feeding Location",
+    guide = guide_legend(override.aes = list(fill = "white", colour = "black"))) +
   guides(
-    fill = guide_legend(override.aes = list(pattern = "none"), order = 1),
-    pattern = guide_legend(override.aes = list(fill = "white"), order = 2)) +
-  scale_fill_manual(values = c("cone" = "#E69F00", "other" = "#009E73"),
-                    labels = c("cone" = "Spruce Cone Seed", "other" = "Non-seed")) +
-  labs(x = NULL, y = "Proportion of total feeding events",
-       fill = "Food Type", pattern = "Feeding Location") +
+    fill = guide_legend(
+      override.aes = list(pattern = "none", colour = "black"),
+      order = 2),
+    pattern = guide_legend(
+      override.aes = list(fill = "white", colour = "black"),
+      order = 1)) +
+  labs(x = NULL, y = "Predicted proportion of total feeding events") +
   theme_minimal(base_size = 22) +
-  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.75),
-        panel.grid.major.x = element_blank(),
-        panel.grid.major.y  = element_line(color = "grey90"),
-        plot.title = element_text(size = 26, hjust = 0.5, face = "bold", margin = margin(b = 20, unit = "pt")),
-        legend.title = element_text(size = 23, face = "bold"),
-        legend.text = element_text(size = 20),
-        legend.spacing.y = unit(1, "cm"),
-        legend.key.height = unit(1.4, "cm"),
-        plot.margin = margin(t = 25, r = 20, b = 20, l = 10),
-        legend.box.margin = margin(t = 0, r = 10, b = 0, l = -10),
-        axis.text.x = element_blank(),
-        axis.text.y = element_text(color = "black"),
-        strip.text = element_text(size = 24, face = "bold"))
+  theme(
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.75),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color = "grey90"),
+    axis.text.x  = element_blank(),
+    axis.text.y = element_text(color = "black"),
+    strip.text = element_text(size = 24, face = "bold"),
+    legend.position = "right",
+    panel.spacing.x = unit(1.2, "cm"),
+    legend.title = element_text(size = 21, face = "bold"),
+    legend.text = element_text(size = 19),
+    plot.margin = margin(t = 20, r = 20, b = 20, l = 10))
 
 feeding_comparison
 
 #save
 ggsave("Output/feeding_comparison_model.jpeg", plot = feeding_comparison, width = 12, height = 7)
-
 
 # male vs female feeding --------------------------------------------------
 # predicted proportion of feeding events that occur on- vs off-midden by food group and sex

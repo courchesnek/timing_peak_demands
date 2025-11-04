@@ -95,7 +95,7 @@ energetics <- ggplot(feeding_proportions, aes(x = season, y = proportion_DEE, fi
              labeller = labeller(food_type = c("capital" = "Capital (Cached)", "income" = "Income (Fresh)"))) +
   labs(
     x = "Season",
-    y = "Daily Energy Expenditure (kJ/day)",
+    y = "Daily Energy Input (kJ/day)",
     fill = "Sex") +
   scale_fill_manual(
     values = c("F" = "#CC6677", "M" = "#88CCEE"),
