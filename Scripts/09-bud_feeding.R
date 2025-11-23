@@ -49,6 +49,9 @@ pred <- ggpredict(
   bias_correction = TRUE)
 
 #plot ------------------------------
+#source theme
+source("Scripts/00-plot_theme.R")
+
 bud_feeding <- ggplot(pred, aes(x = x, y = predicted, colour = group, fill = group)) +
   geom_line(linewidth = 1.2) +
   geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.15, colour = NA) +
@@ -61,28 +64,31 @@ bud_feeding <- ggplot(pred, aes(x = x, y = predicted, colour = group, fill = gro
                         labels = c("Mar", "Apr", "May", "Jun", "Jul", "Aug"),
                         name = "Month")) +
   scale_y_continuous(
-    name = "Predicted Proportion of Feeding Events\non Spruce Buds",
+    name = "Predicted proportion of total feeding\nevents on spruce buds",
     limits = c(0, 0.6),
     breaks = seq(0, 0.6, by = 0.1),
     expand = c(0, 0)) +
   scale_colour_manual(
-    values = c("M" = "#1F78B4", "F" = "#E31A1C"),
-    labels = c("Male", "Female"),
+    values = c("F" = "#E31A1C", "M" = "#1F78B4"),
+    breaks = c("F", "M"),
+    labels = c("Female", "Male"),
     name = "Sex") +
   scale_fill_manual(
-    values = c("M" = "#1F78B4", "F" = "#E31A1C"),
-    labels = c("Male", "Female"),
+    values = c("F" = "#E31A1C", "M" = "#1F78B4"),
+    breaks = c("F", "M"),
+    labels = c("Female", "Male"),
     name = "Sex") +
   labs(
     title = NULL) +
-  theme_classic(base_size = 21) +
-  theme(
-    axis.title.x.top = element_text(margin = margin(b = 10)),
-    legend.position = "bottom",
-    legend.box.margin = margin(t = -20, r = 10, b = 0, l = 0),
-    legend.title = element_text(size = 20),
-    legend.text = element_text(size = 18))
-
+  theme_thesis() +
+  theme(legend.position = "bottom",
+        panel.grid.major.x = element_line(colour = "grey85", linewidth = 0.6),
+        panel.grid.minor.x = element_blank(),
+        axis.title.x.top = element_text(
+          margin = margin(b = 10)),
+        axis.text.x.top = element_text(
+          margin = margin(b = 8)))
+        
 bud_feeding
 
 #save

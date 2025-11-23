@@ -12,7 +12,7 @@ tree_cones <- read.csv("Input/tree_cones.csv")
 
 # remove years following a cone crop failure ------------------------
 failed_years <- tree_cones %>%
-  filter(cone_index < 1) %>%
+  filter(cone_index < 0.6) %>%
   pull(year)
 
 years_to_remove <- failed_years + 1

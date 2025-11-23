@@ -130,9 +130,10 @@ final_predicted$Overall <- factor(final_predicted$Overall,
 
 pos <- position_dodge(width = 0.72)
 
-feeding_comparison <- ggplot(
-  final_predicted,
-  aes(x = food_group, y = final_prop,
+#source theme
+source("Scripts/00-plot_theme.R")
+
+feeding_comparison <- ggplot(final_predicted, aes(x = food_group, y = final_prop,
       fill = food_group, pattern = midden_status, group = midden_status)) +
   geom_col_pattern(
     position = pos, width = 0.62,
@@ -141,22 +142,21 @@ feeding_comparison <- ggplot(
     pattern_angle = 45,
     pattern_density = 0.12,
     pattern_spacing = 0.02) +
-  geom_errorbar(
-    aes(ymin = CI_lower, ymax = CI_upper),
-    position = pos, width = 0.12, linewidth = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), position = pos, width = 0.12, linewidth = 0.6) +
   facet_wrap(~ Overall, nrow = 1) +
   scale_x_discrete(expand = expansion(mult = c(0.4, 0.4))) +
   scale_y_continuous(
     labels = scales::percent_format(accuracy = 1),
     expand = c(0, 0), limits = c(0, 1.05)) +
+  coord_cartesian(ylim = c(0, 1.0)) +
   scale_fill_manual(
     values = c("cone" = "#E69F00", "other" = "#009E73"),
-    labels = c("Spruce Cone Seed", "Non-seed"),
-    name = "Food Type") +
+    labels = c("Spruce cone seed", "Non-seed"),
+    name = "Food type") +
   scale_pattern_manual(
     values = c("on" = "none", "off" = "stripe"),
     labels = c("On-midden", "Off-midden"),
-    name = "Feeding Location",
+    name = "Feeding location",
     guide = guide_legend(override.aes = list(fill = "white", colour = "black"))) +
   guides(
     fill = guide_legend(
@@ -166,20 +166,12 @@ feeding_comparison <- ggplot(
       override.aes = list(fill = "white", colour = "black"),
       order = 1)) +
   labs(x = NULL, y = "Predicted proportion of total feeding events") +
-  theme_minimal(base_size = 22) +
-  theme(
-    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.75),
-    panel.grid.major.x = element_blank(),
-    panel.grid.major.y = element_line(color = "grey90"),
-    axis.text.x  = element_blank(),
-    axis.text.y = element_text(color = "black"),
-    strip.text = element_text(size = 24, face = "bold"),
-    legend.position = "right",
-    panel.spacing.x = unit(1.2, "cm"),
-    legend.title = element_text(size = 21, face = "bold"),
-    legend.text = element_text(size = 19),
-    plot.margin = margin(t = 20, r = 20, b = 20, l = 10))
-
+  theme_thesis() +
+  theme(strip.text = element_text(size = 21),
+        legend.position = "right",
+        axis.text.x = element_blank(),
+        legend.key.height = unit(0.9, "cm"))
+    
 feeding_comparison
 
 #save

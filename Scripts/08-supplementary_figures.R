@@ -87,7 +87,11 @@ feeding_proportions <- feeding %>%
 feeding_proportions <- feeding_proportions %>%
   mutate(
     season = factor(season, levels = c("winter", "mating", "lactation", "non-breeding")),
-    food_type = factor(food_type, levels = c("capital", "income")))
+    food_type = factor(food_type, levels = c("capital", "income")),
+    sex = factor(sex, levels = c("F", "M")))
+
+#source theme
+source("Scripts/00-plot_theme.R")
 
 energetics <- ggplot(feeding_proportions, aes(x = season, y = proportion_DEE, fill = sex)) +
   geom_bar(stat = "identity", position = "dodge", color = "black", width = 0.7) +
@@ -95,7 +99,7 @@ energetics <- ggplot(feeding_proportions, aes(x = season, y = proportion_DEE, fi
              labeller = labeller(food_type = c("capital" = "Capital (Cached)", "income" = "Income (Fresh)"))) +
   labs(
     x = "Season",
-    y = "Daily Energy Input (kJ/day)",
+    y = "Daily energy input (kJ/day)",
     fill = "Sex") +
   scale_fill_manual(
     values = c("F" = "#CC6677", "M" = "#88CCEE"),
@@ -106,19 +110,10 @@ energetics <- ggplot(feeding_proportions, aes(x = season, y = proportion_DEE, fi
                "lactation" = "Lactation",
                "non-breeding" = "Non-breeding")) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.05))) + 
-  theme_minimal() +
-  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 1.0),
-    legend.position = "bottom",
-    axis.title.x = element_text(size = 20, margin = margin(t = 15, b = -5)),
-    axis.title.y = element_text(size = 20, margin = margin(r = 15, l = 10)),
-    axis.text = element_text(size = 16, color = "black"),
-    legend.title = element_text(size = 20),
-    legend.text = element_text(size = 18),
-    strip.text = element_text(size = 22, face = "bold", margin = margin(b = 10, t = 10)),
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor.x = element_blank(),
-    panel.grid.major.y = element_line(color = "grey80"),
-    panel.grid.minor.y = element_blank())
+  theme_thesis() +
+  theme(legend.position = "bottom",
+        legend.margin = margin(t = -3),
+        strip.text = element_text(margin = margin(b = 8)))
 
 energetics
 
