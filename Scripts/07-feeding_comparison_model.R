@@ -51,8 +51,10 @@ model <- glmer(midden_status ~ food_group * sex + cone_index_previous_scaled + (
 sim_res <- simulateResiduals(model) #remember: with large sample sizes, even very small deviations can become significant
 plot(sim_res) 
 
-testOutliers(sim_res) #no significant outliers
+testOutliers(sim_res, type = "bootstrap") #no significant outliers
 testDispersion(sim_res) #no overdispersion - dispersion = 0.94446 which is close to 1 (which is what you want)
+
+car::vif(model)
 
 #model summary
 summary(model)
@@ -94,6 +96,7 @@ off_summary <- feeding_detailed %>%
   ungroup()
 
 ## step 3: merge observed summaries with model predictions - this gives us the weighted predictions for diet composition ------
+#scale model-based predicted probabilities (and their 95% CIs) by observed food-type proportions
 on_summary <- on_summary %>%
   left_join(pred_on_midden, by = c("food_group", "sex")) %>%
   mutate(final_prop = prop_detail * prob,
@@ -200,3 +203,100 @@ length(unique(feeding_detailed$squirrel_id))
 length(unique(feeding_detailed$squirrel_id[feeding_detailed$sex == "M"]))
 length(unique(feeding_detailed$squirrel_id[feeding_detailed$sex == "F"]))
 length(unique(feeding_detailed$year))
+
+# % feeding off midden: ----------------------------------------------
+# 1. calculate the actual diet composition (what % of their diet is cones vs other)
+diet_proportions <- feeding_detailed %>%
+  group_by(sex, food_group) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(sex) %>%
+  mutate(diet_weight = n / sum(n))
+
+# 2. multiply those diet weights by the model's off-midden probabilities
+weighted_results <- diet_proportions %>%
+  left_join(pred_off_midden, by = c("sex", "food_group")) %>%
+  mutate(weighted_contribution = diet_weight * prob) %>%
+  group_by(sex) %>%
+  summarise(total_off_midden_percent = sum(weighted_contribution) * 100)
+
+print(weighted_results)
+
+# dummy plot for predictions ----------------------------------------------
+dummy_predicted <- tribble(
+  ~Overall,            ~midden_status, ~sex, ~food_group, ~final_prop, ~CI_lower, ~CI_upper,
+  # ---- MALES: mating ----
+  "Male: Mating",      "on",   "M", "cone", 0.78, 0.70, 0.85,
+  "Male: Mating",      "off",  "M", "cone", 0.00, 0.00, 0.00,
+  "Male: Mating",      "on",   "M", "other",0.05, 0.02, 0.09,
+  "Male: Mating",      "off",  "M", "other",0.17, 0.10, 0.25,
+  
+  # ---- FEMALES: lactation ----
+  "Female: Lactation", "on",   "F", "cone",  0.15, 0.10, 0.20,
+  "Female: Lactation", "off",  "F", "cone",  0.35, 0.28, 0.43,
+  "Female: Lactation", "on",   "F", "other", 0.10, 0.05, 0.17,
+  "Female: Lactation", "off",  "F", "other", 0.40, 0.35, 0.46) %>%
+  mutate(
+    midden_status = factor(midden_status, levels = c("on","off")),
+    sex = factor(sex, levels = c("M","F")),
+    Overall = factor(Overall, levels = c("Male: Mating","Female: Lactation")),
+    food_group = factor(food_group, levels = c("cone","other")))
+
+pos <- position_dodge(width = 0.72)
+
+dummy_plot <- ggplot(dummy_predicted,
+                     aes(x = food_group, 
+                         y = final_prop,
+                         fill = food_group,
+                         pattern = midden_status,
+                         group = midden_status)) +
+  
+  geom_col_pattern(
+    position = pos, width = 0.62,
+    colour = "black",
+    pattern_fill = "black",
+    pattern_angle = 45,
+    pattern_density = 0.12,
+    pattern_spacing = 0.02) +
+  
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper),
+                position = pos, width = 0.12, linewidth = 0.6) +
+  
+  facet_wrap(~ Overall, nrow = 1) +
+  
+  scale_x_discrete(expand = expansion(mult = c(0.4, 0.4))) +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    expand = c(0, 0), limits = c(0, 1.05)) +
+  coord_cartesian(ylim = c(0, 1.0)) +
+  
+  scale_fill_manual(
+    values = c("cone" = "#E69F00", "other" = "#009E73"),
+    labels = c("Spruce cone seed", "Non-seed"),
+    name = "Food type") +
+  
+  scale_pattern_manual(
+    values = c("on" = "none", "off" = "stripe"),
+    labels = c("On-midden", "Off-midden"),
+    name = "Feeding location",
+    guide = guide_legend(override.aes = list(fill = "white", colour = "black"))) +
+  
+  guides(
+    fill = guide_legend(
+      override.aes = list(pattern = "none", colour = "black"),
+      order = 2),
+    pattern = guide_legend(
+      override.aes = list(fill = "white", colour = "black"),
+      order = 1)) +
+  
+  labs(x = NULL, y = "Proportion of total feeding events") +
+  theme_thesis() +
+  theme(
+    strip.text = element_text(size = 21),
+    legend.position = "right",
+    axis.text.x = element_blank(),
+    legend.key.height = unit(0.9, "cm"))
+
+dummy_plot
+
+#save
+ggsave("Output/feeding_comparison_predictions.jpeg", plot = dummy_plot, width = 12, height = 7)
